@@ -408,8 +408,10 @@ export function validateFrontendDependencies(
  * builtin FinishTool so automation presets (openhands-automation >= 1.9.0) can
  * resolve it on the remote conversations they dispatch — see the note at the
  * bottom of tools/canvas_ui_tool.py.
+ * `vision_model_override` hardcodes vision for model names containing marmot.
  */
-export const AGENT_SERVER_IMPORT_MODULES = "canvas_ui_tool";
+export const AGENT_SERVER_IMPORT_MODULES =
+  "canvas_ui_tool,vision_model_override";
 
 /**
  * Build the uvx command and arguments for running agent-server.
