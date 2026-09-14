@@ -83,7 +83,7 @@ const appIconPath = join(
 // icon. Must match appId in electron-builder.config.mjs, and must be set
 // before any BrowserWindow is created.
 if (process.platform === "win32") {
-  app.setAppUserModelId("dev.openhands.agent-canvas");
+  app.setAppUserModelId("cn.dimleap.suricate-desktop");
 }
 
 // ── Bundled uv ────────────────────────────────────────────────────────────────
