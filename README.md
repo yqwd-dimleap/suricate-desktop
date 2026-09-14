@@ -9,13 +9,30 @@ Suricate Desktop is a local fork of **OpenHands Agent Canvas**, focused on packa
 
 This repo keeps the Canvas frontend + Electron desktop packaging path so it can be built independently of a full OpenHands cloud/SaaS stack.
 
-## Desktop
+## Desktop (independent installer, like Agent Canvas `.dmg`)
+
+From this repo root:
 
 ```sh
 npm install
-npm run desktop              # build web UI + launch Electron
-npm run build:desktop        # package installers via electron-builder
+npm run build                # same as npm run build:desktop
+# or: ./build.sh
 ```
+
+macOS output (Apple Silicon):
+
+```
+dist-electron/Suricate-Desktop-0.1.0-arm64.dmg
+```
+
+Other scripts:
+
+| Command | What it does |
+|---------|----------------|
+| `npm run build` / `npm run build:dmg` / `npm run build:mac` | Frontend + uv/node + electron-builder DMG |
+| `npm run build:desktop:universal` | Universal macOS (still ships host-arch uv/node) |
+| `npm run desktop` | Dev: build web UI and open Electron (not a DMG) |
+| `npm run build:web` / `npm run build:app` | Static web UI only (`build/`) |
 
 ## Web / local stack
 
