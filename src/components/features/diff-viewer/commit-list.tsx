@@ -15,6 +15,8 @@ export interface CommitListProps {
   uncommittedChanges: DiffChangeListItem[];
   autoExpandUncommitted?: boolean;
   onAutoExpandHandled?: () => void;
+  autoExpandPath?: string | null;
+  onAutoExpandPathHandled?: () => void;
 }
 
 /**
@@ -29,15 +31,19 @@ export function CommitList({
   uncommittedChanges,
   autoExpandUncommitted = false,
   onAutoExpandHandled,
+  autoExpandPath = null,
+  onAutoExpandPathHandled,
 }: CommitListProps) {
   const { t } = useTranslation("openhands");
   const [expandedKey, setExpandedKey] = React.useState<string | null>(null);
 
   React.useEffect(() => {
-    if (!autoExpandUncommitted) return;
+    if (!autoExpandUncommitted && !autoExpandPath) return;
     setExpandedKey(UNCOMMITTED_KEY);
-    onAutoExpandHandled?.();
-  }, [autoExpandUncommitted, onAutoExpandHandled]);
+    if (autoExpandUncommitted) {
+      onAutoExpandHandled?.();
+    }
+  }, [autoExpandUncommitted, autoExpandPath, onAutoExpandHandled]);
 
   // Author is noise when every commit has the same one (the usual
   // single-agent conversation); show it only when authors differ.
@@ -53,6 +59,8 @@ export function CommitList({
             prev === UNCOMMITTED_KEY ? null : UNCOMMITTED_KEY,
           )
         }
+        autoExpandPath={autoExpandPath}
+        onAutoExpandPathHandled={onAutoExpandPathHandled}
       />
       {commits.map((commit) => (
         <CommitRow
