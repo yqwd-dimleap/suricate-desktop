@@ -12,7 +12,9 @@ import {
 } from "react-icons/lu";
 import { IconType } from "react-icons/lib";
 import { GitChangeStatus } from "#/api/open-hands.types";
+import { ConfirmationModal } from "#/components/shared/modals/confirmation-modal";
 import { I18nKey } from "#/i18n/declaration";
+import { useRevertGitFileChange } from "#/hooks/mutation/use-revert-git-file-change";
 import { getLanguageFromPath } from "#/utils/get-language-from-path";
 import { cn } from "#/utils/utils";
 import { ChevronDown, ChevronRight } from "lucide-react";
@@ -118,11 +120,14 @@ export function FileDiffViewer({
   const [hasMeasuredEditorHeight, setHasMeasuredEditorHeight] =
     React.useState(false);
   const [viewMode, setViewMode] = React.useState<ViewMode>("diff");
+  const [isRevertConfirmOpen, setIsRevertConfirmOpen] = React.useState(false);
   const diffEditorRef = React.useRef<editor_t.IStandaloneDiffEditor>(null);
   const singleEditorRef = React.useRef<editor_t.IStandaloneCodeEditor>(null);
+  const revertMutation = useRevertGitFileChange();
 
   const isAdded = type === "A" || type === "U";
   const isDeleted = type === "D";
+  const canRevert = !commit;
 
   const filePath = React.useMemo(() => {
     if (type === "R") {
@@ -326,6 +331,19 @@ export function FileDiffViewer({
               ))}
             </span>
           )}
+          {canRevert && (
+            <button
+              data-testid="revert-file-button"
+              type="button"
+              className="shrink-0 rounded px-1.5 py-0.5 text-xs text-[var(--oh-muted)] hover:bg-[var(--oh-interactive-hover)] hover:text-white"
+              onClick={(event) => {
+                event.stopPropagation();
+                setIsRevertConfirmOpen(true);
+              }}
+            >
+              {t(I18nKey.DIFF_VIEWER$REVERT)}
+            </button>
+          )}
           <button
             data-testid="collapse"
             type="button"
@@ -352,6 +370,23 @@ export function FileDiffViewer({
           isSuccess && renderContent()
         )}
       </AccordionPanel>
+
+      {isRevertConfirmOpen && (
+        <ConfirmationModal
+          text={t(I18nKey.DIFF_VIEWER$REVERT_CONFIRM, { path: filePath })}
+          confirmText={t(I18nKey.DIFF_VIEWER$REVERT)}
+          isConfirming={revertMutation.isPending}
+          onCancel={() => setIsRevertConfirmOpen(false)}
+          onConfirm={() => {
+            revertMutation.mutate(
+              { path: filePath, status: type },
+              {
+                onSuccess: () => setIsRevertConfirmOpen(false),
+              },
+            );
+          }}
+        />
+      )}
     </div>
   );
 }

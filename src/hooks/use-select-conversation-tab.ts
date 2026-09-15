@@ -4,6 +4,8 @@ import {
   type ConversationTab,
 } from "#/stores/conversation-store";
 import { useOptionalConversationId } from "#/hooks/use-conversation-id";
+import { useActiveConversation } from "#/hooks/query/use-active-conversation";
+import { toFilesTabPath } from "#/utils/path-utils";
 
 /**
  * Custom hook for selecting conversation tabs with consistent behavior.
@@ -15,6 +17,7 @@ import { useOptionalConversationId } from "#/hooks/use-conversation-id";
  */
 export function useSelectConversationTab() {
   const { conversationId } = useOptionalConversationId();
+  const { data: conversation } = useActiveConversation();
   const {
     selectedTab,
     isRightPanelShown,
@@ -23,6 +26,7 @@ export function useSelectConversationTab() {
     setIsRightPanelShown,
     setSelectedTab,
     setCommitsAutoExpandSection,
+    setCommitsAutoExpandPath,
   } = useConversationStore();
 
   const { setSelectedTab: setPersistedSelectedTab, setRightPanelShown } =
@@ -67,13 +71,26 @@ export function useSelectConversationTab() {
     setIsOverviewPanelShown(false);
   };
 
-  const navigateToChanges = () => {
+  /**
+   * Open the Commits drawer on Uncommitted. Optional `path` expands that
+   * file's working-tree diff after normalizing to a Files-tab relative path.
+   */
+  const navigateToChanges = (path?: string | null) => {
     setCommitsAutoExpandSection("uncommitted");
+    const trimmed = path?.trim();
+    if (trimmed) {
+      setCommitsAutoExpandPath(
+        toFilesTabPath(trimmed, conversation?.workspace?.working_dir) || null,
+      );
+    } else {
+      setCommitsAutoExpandPath(null);
+    }
     navigateToTab("commits");
   };
 
   const navigateToCommits = () => {
     setCommitsAutoExpandSection(null);
+    setCommitsAutoExpandPath(null);
     navigateToTab("commits");
   };
 
