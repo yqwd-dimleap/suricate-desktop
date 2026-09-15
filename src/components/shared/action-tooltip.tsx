@@ -6,9 +6,10 @@ import { StyledTooltip } from "./buttons/styled-tooltip";
 interface ActionTooltipProps {
   type: "confirm" | "reject";
   onClick: () => void;
+  disabled?: boolean;
 }
 
-export function ActionTooltip({ type, onClick }: ActionTooltipProps) {
+export function ActionTooltip({ type, onClick, disabled }: ActionTooltipProps) {
   const { t } = useTranslation("openhands");
 
   const isConfirm = type === "confirm";
@@ -31,9 +32,11 @@ export function ActionTooltip({ type, onClick }: ActionTooltipProps) {
         data-testid={`action-${type}-button`}
         type="button"
         aria-label={ariaLabel}
+        disabled={disabled}
         className={cn(
           "rounded px-2 h-6.5 text-sm font-normal leading-5 cursor-pointer hover:opacity-80",
           type === "confirm" ? "bg-tertiary text-white" : "bg-white text-base",
+          disabled && "opacity-50 cursor-not-allowed hover:opacity-50",
         )}
         onClick={onClick}
       >
