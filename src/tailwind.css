@@ -302,6 +302,12 @@ button.extension-module-card-interactive {
   scrollbar-color: var(--oh-scrollbar) transparent;
 }
 
+/* Tighten the gap between a "Thought" section and the message right after it */
+[data-testid="collapsible-thinking"]
+  + [data-testid="agent-message"] {
+  margin-top: 8px;
+}
+
 /*
  * Sidebar conversation list: reserve a stable gutter so short lists keep the
  * same right inset as when a vertical scrollbar is present (aligns with nav).

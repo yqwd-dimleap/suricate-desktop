@@ -19,6 +19,10 @@ export type TextShimmerProps = {
   className?: string;
   duration?: number;
   spread?: number;
+  /** CSS color of the bright sweep band (defaults to --oh-foreground). */
+  highlight?: string;
+  /** CSS color of the base (non-swept) text (defaults to --oh-muted). */
+  base?: string;
 } & Omit<React.HTMLAttributes<HTMLElement>, "children" | "className">;
 
 function TextShimmerComponent({
@@ -27,6 +31,8 @@ function TextShimmerComponent({
   className,
   duration = 2,
   spread = 2,
+  highlight = "var(--oh-foreground)",
+  base = "var(--oh-muted)",
   style,
   ...rest
 }: TextShimmerProps) {
@@ -44,7 +50,7 @@ function TextShimmerComponent({
     const center = SHIMMER_PERIOD / 2;
     return {
       ...style,
-      backgroundImage: `repeating-linear-gradient(90deg, var(--oh-muted) 0%, var(--oh-muted) ${center - bandHalfWidth}%, var(--oh-foreground) ${center}%, var(--oh-muted) ${center + bandHalfWidth}%, var(--oh-muted) ${SHIMMER_PERIOD}%)`,
+      backgroundImage: `repeating-linear-gradient(90deg, ${base} 0%, ${base} ${center - bandHalfWidth}%, ${highlight} ${center}%, ${base} ${center + bandHalfWidth}%, ${base} ${SHIMMER_PERIOD}%)`,
       backgroundSize: `${SHIMMER_BACKGROUND_SIZE} 100%`,
       backgroundRepeat: "no-repeat",
       WebkitBackgroundClip: "text",
@@ -53,13 +59,13 @@ function TextShimmerComponent({
       WebkitTextFillColor: "transparent",
       animation: `${animationName} ${duration}s linear infinite`,
     } as React.CSSProperties;
-  }, [animationName, bandHalfWidth, duration, style]);
+  }, [animationName, bandHalfWidth, duration, highlight, base, style]);
 
   if (reduceMotion) {
     return (
       <Component
         className={cn("text-[var(--oh-muted)]", className)}
-        style={style}
+        style={{ ...style, color: base }}
         {...rest}
       >
         {children}
