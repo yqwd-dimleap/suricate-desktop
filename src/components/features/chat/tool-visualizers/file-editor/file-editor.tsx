@@ -1,10 +1,11 @@
 /**
  * File-editor visualizer for `file_editor` / `str_replace_editor` tools.
  *
- * Observation card: error → message; `str_replace`/`insert` → diff of the file
- * before vs after; `create`/`view` → the file content. Action card (shown while
- * the edit is in flight): `create` → new content; `str_replace` → diff of the
- * replaced snippet; `view`/`undo_edit` → just the path + range.
+ * Observation card: error → message; mutating edits → Cursor-style review
+ * card (filename + +/- stats + Keep/Revert + line-numbered diff);
+ * `create`/`view` → the file content. Action card (shown while the edit is in
+ * flight): `create` → new content; `str_replace` → diff of the replaced
+ * snippet; `view`/`undo_edit` → just the path + range.
  *
  * Created Markdown artifacts get a height-clipped rich preview with a View bar
  * that opens the Files drawer, instead of dumping the full source into a code
@@ -31,6 +32,7 @@ import {
   isMarkdownFilePath,
   MarkdownFilePreview,
 } from "../primitives/markdown-file-preview";
+import { FileEditorReviewCard } from "./file-editor-review-card";
 
 type FileEditorCardProps = VisualizerProps<
   FileEditorAction | StrReplaceEditorAction,
@@ -104,7 +106,32 @@ function FileEditorCardBody({
     } else if (obs.old_content != null && obs.new_content != null) {
       // Nullish, not truthy: an empty string is a valid side of the diff —
       // clearing a file or inserting into an empty file must still render it.
-      body = <DiffView oldText={obs.old_content} newText={obs.new_content} />;
+      body = (
+        <FileEditorReviewCard
+          path={path}
+          oldText={obs.old_content}
+          newText={obs.new_content}
+          prevExist={obs.prev_exist}
+          showReviewActions
+        />
+      );
+      leadingChip = null;
+    } else if (
+      command === "create" &&
+      obs.new_content != null &&
+      !isMarkdownFilePath(path)
+    ) {
+      // Created non-markdown files: show as an all-additions review card.
+      body = (
+        <FileEditorReviewCard
+          path={path}
+          oldText=""
+          newText={obs.new_content}
+          prevExist={false}
+          showReviewActions
+        />
+      );
+      leadingChip = null;
     } else {
       // `view` returns the snippet the agent saw in `content` (the `cat -n`
       // output) rather than `output`/`new_content`, so fall back to it.
@@ -139,10 +166,26 @@ function FileEditorCardBody({
       (act.command === "str_replace" || act.command === "insert") &&
       act.new_str != null
     ) {
-      // `insert` carries only `new_str`, no `old_str`. Key on `new_str` and
-      // default `old_str` to "" so an in-flight insert shows an addition diff
-      // instead of nothing.
-      body = <DiffView oldText={act.old_str ?? ""} newText={act.new_str} />;
+      // In-flight snippet diff — no Keep/Revert until the observation lands.
+      if (path) {
+        body = (
+          <FileEditorReviewCard
+            path={path}
+            oldText={act.old_str ?? ""}
+            newText={act.new_str}
+            showReviewActions={false}
+          />
+        );
+        leadingChip = null;
+      } else {
+        body = (
+          <DiffView
+            oldText={act.old_str ?? ""}
+            newText={act.new_str}
+            language={language}
+          />
+        );
+      }
     }
     return (
       <div className="flex flex-col gap-2">
