@@ -9,6 +9,7 @@ import {
 import { I18nKey } from "#/i18n/declaration";
 import { Provider } from "#/types/settings";
 import { useTracking } from "#/hooks/use-tracking";
+import { useFilesTabStore } from "#/stores/files-tab-store";
 
 interface GitControlBarPushButtonProps {
   onSuggestionsClick: (value: string) => void;
@@ -27,12 +28,18 @@ export function GitControlBarPushButton({
 }: GitControlBarPushButtonProps) {
   const { t } = useTranslation("openhands");
   const { trackPushButtonClick } = useTracking();
+  const clearAllStickyReveals = useFilesTabStore(
+    (state) => state.clearAllStickyReveals,
+  );
 
   const isButtonEnabled =
     providerTokensReady && hasRepository && isConversationReady;
 
   const handlePushClick = () => {
     trackPushButtonClick();
+    // Push is agent-mediated; clear review highlights when the user asks to
+    // publish — working-tree clean-up also clears via git-changes watching.
+    clearAllStickyReveals();
     onSuggestionsClick(getGitPushPrompt(currentGitProvider));
   };
 

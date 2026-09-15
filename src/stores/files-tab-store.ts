@@ -1,5 +1,21 @@
 import { create } from "zustand";
 import { setConversationState } from "#/utils/conversation-local-storage";
+import type { FileRevealRange } from "#/utils/file-reveal-range";
+import { normalizeFileRevealRange } from "#/utils/file-reveal-range";
+
+export type PendingFileReveal = {
+  path: string;
+  startLine: number;
+  endLine: number;
+  /** Bumps on every reveal so re-clicking the same range re-triggers scroll. */
+  nonce: number;
+};
+
+type StickyRevealRange = {
+  startLine: number;
+  endLine: number;
+  nonce: number;
+};
 
 interface FilesTabState {
   selectedPath: string | null;
@@ -14,10 +30,20 @@ interface FilesTabState {
    * conversation. The quick-row tab strip renders only these paths.
    */
   openPaths: string[];
+  /**
+   * Persistent line highlights keyed by Files-tab path. Survive until Keep /
+   * Revert or the path is no longer dirty vs HEAD (committed / pushed clean).
+   */
+  stickyReveals: Record<string, StickyRevealRange>;
   setSelectedPath: (
     path: string | null,
     conversationId?: string | null,
+    options?: { reveal?: FileRevealRange | null },
   ) => void;
+  /** Register or refresh a sticky highlight without changing selection. */
+  setStickyReveal: (path: string, reveal: FileRevealRange) => void;
+  clearStickyReveal: (path: string) => void;
+  clearAllStickyReveals: () => void;
   /** Remove a path from the open-tab strip; selects a neighbor when needed. */
   closeOpenPath: (path: string) => void;
   /**
@@ -75,13 +101,31 @@ function persistOpenState(
   });
 }
 
+function upsertStickyReveal(
+  stickyReveals: Record<string, StickyRevealRange>,
+  path: string,
+  reveal: FileRevealRange,
+): Record<string, StickyRevealRange> {
+  const normalized = normalizeFileRevealRange(reveal);
+  const previous = stickyReveals[path];
+  return {
+    ...stickyReveals,
+    [path]: {
+      startLine: normalized.startLine,
+      endLine: normalized.endLine,
+      nonce: (previous?.nonce ?? 0) + 1,
+    },
+  };
+}
+
 // Hoisted out of files-tab.tsx local state so non-React callers (e.g. the
 // canvas_ui tool dispatcher in the WebSocket context) can drive selection.
 export const useFilesTabStore = create<FilesTabState>((set) => ({
   selectedPath: null,
   selectedConversationId: null,
   openPaths: [],
-  setSelectedPath: (selectedPath, conversationId = null) =>
+  stickyReveals: {},
+  setSelectedPath: (selectedPath, conversationId = null, options) =>
     set((state) => {
       if (selectedPath === null) {
         const switchedConversation =
@@ -94,12 +138,20 @@ export const useFilesTabStore = create<FilesTabState>((set) => ({
           // Callers that switch conversations should prefer
           // `hydrateForConversation` so persisted tabs can be restored.
           openPaths: switchedConversation ? [] : state.openPaths,
+          stickyReveals: switchedConversation
+            ? ({} as Record<string, StickyRevealRange>)
+            : state.stickyReveals,
         };
         persistOpenState(conversationId, next.openPaths, next.selectedPath);
         return next;
       }
 
       const sameConversation = state.selectedConversationId === conversationId;
+      const stickyReveals = options?.reveal
+        ? upsertStickyReveal(state.stickyReveals, selectedPath, options.reveal)
+        : sameConversation
+          ? state.stickyReveals
+          : ({} as Record<string, StickyRevealRange>);
       const next = {
         selectedPath,
         selectedConversationId: conversationId,
@@ -108,10 +160,23 @@ export const useFilesTabStore = create<FilesTabState>((set) => ({
           selectedPath,
           sameConversation,
         ),
+        stickyReveals,
       };
       persistOpenState(conversationId, next.openPaths, next.selectedPath);
       return next;
     }),
+  setStickyReveal: (path, reveal) =>
+    set((state) => ({
+      stickyReveals: upsertStickyReveal(state.stickyReveals, path, reveal),
+    })),
+  clearStickyReveal: (path) =>
+    set((state) => {
+      if (!(path in state.stickyReveals)) return state;
+      const stickyReveals = { ...state.stickyReveals };
+      delete stickyReveals[path];
+      return { stickyReveals };
+    }),
+  clearAllStickyReveals: () => set({ stickyReveals: {} }),
   closeOpenPath: (path) =>
     set((state) => {
       if (!state.openPaths.includes(path)) return state;
@@ -120,9 +185,12 @@ export const useFilesTabStore = create<FilesTabState>((set) => ({
         path,
         state.selectedPath,
       );
+      const stickyReveals = { ...state.stickyReveals };
+      delete stickyReveals[path];
       const next = {
         openPaths: state.openPaths.filter((openPath) => openPath !== path),
         selectedPath,
+        stickyReveals,
       };
       persistOpenState(
         state.selectedConversationId,
@@ -136,5 +204,6 @@ export const useFilesTabStore = create<FilesTabState>((set) => ({
       selectedConversationId: conversationId,
       openPaths,
       selectedPath: resolveSelectedPath(openPaths, selectedPath),
+      stickyReveals: {},
     }),
 }));
