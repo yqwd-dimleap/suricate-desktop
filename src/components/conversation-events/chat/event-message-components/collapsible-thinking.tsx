@@ -4,11 +4,18 @@ import ArrowDown from "#/icons/angle-down-solid.svg?react";
 import ArrowUp from "#/icons/angle-up-solid.svg?react";
 import LightbulbIcon from "#/icons/lightbulb.svg?react";
 import { I18nKey } from "#/i18n/declaration";
+import { TextShimmer } from "../../../shared/text-shimmer";
 import { MarkdownRenderer } from "../../../features/markdown/markdown-renderer";
 
 interface CollapsibleThinkingProps {
   /** The thinking / reasoning content to display when expanded. */
   content: string;
+  /**
+   * True while the agent is still producing this reasoning. The label shows
+   * an animated shimmer while in progress; once the thought lands the
+   * animation stops and the label flips from "Thinking" to "Thought".
+   */
+  isThinking?: boolean;
 }
 
 /**
@@ -16,7 +23,10 @@ interface CollapsibleThinkingProps {
  * section.  Collapsed by default so the chat stays compact — especially
  * useful when the thinking language differs from the conversation language.
  */
-export function CollapsibleThinking({ content }: CollapsibleThinkingProps) {
+export function CollapsibleThinking({
+  content,
+  isThinking = false,
+}: CollapsibleThinkingProps) {
   const { t } = useTranslation("openhands");
   const [expanded, setExpanded] = React.useState(false);
 
@@ -28,8 +38,9 @@ export function CollapsibleThinking({ content }: CollapsibleThinkingProps) {
 
   return (
     <div
-      className="my-1 w-full py-1 text-sm"
+      className="mt-1 w-full pt-1 text-sm"
       data-testid="collapsible-thinking"
+      data-thinking={isThinking || undefined}
     >
       <button
         type="button"
@@ -42,10 +53,26 @@ export function CollapsibleThinking({ content }: CollapsibleThinkingProps) {
         className="w-full flex items-center gap-2 text-left cursor-pointer"
       >
         <Chevron className="h-4 w-4 fill-[var(--oh-muted)] flex-shrink-0" />
-        <LightbulbIcon className="h-4 w-4 fill-[var(--oh-muted)] flex-shrink-0" />
-        <span className="font-normal text-[var(--oh-muted)]">
-          {t(I18nKey.THINKING$TITLE)}
-        </span>
+        {isThinking ? (
+          <TextShimmer
+            as="span"
+            data-testid="collapsible-thinking-label"
+            className="font-normal"
+            duration={1.2}
+            spread={4}
+            base="var(--cool-grey-600)"
+            highlight="color-mix(in srgb, var(--oh-color-primary) 55%, white)"
+          >
+            {t(I18nKey.THINKING$TITLE)}
+          </TextShimmer>
+        ) : (
+          <>
+            <LightbulbIcon className="h-4 w-4 fill-[var(--oh-muted)] flex-shrink-0" />
+            <span className="font-normal text-[var(--oh-muted)]">
+              {t(I18nKey.OBSERVATION_MESSAGE$THINK)}
+            </span>
+          </>
+        )}
       </button>
 
       {expanded && (

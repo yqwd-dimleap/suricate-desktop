@@ -434,6 +434,39 @@ export function ChatInterface() {
     scrollDomToBottom,
   ]);
 
+  // Stick-to-bottom while content GROWS in place: streamed thinking / answer
+  // text is merged into the same event (length never changes), so the
+  // length-based effect above misses it. A MutationObserver on the scroll
+  // container follows every DOM mutation (streamed text, expanding cards) —
+  // but only while `autoScroll` is on, which the user turns off by
+  // scrolling up, and never while a "load older" position restore is pending.
+  const autoScrollRef = React.useRef(autoScroll);
+  React.useEffect(() => {
+    autoScrollRef.current = autoScroll;
+  }, [autoScroll]);
+  React.useEffect(() => {
+    const target = scrollRef.current;
+    if (!target) return;
+    let frame: number | null = null;
+    const observer = new MutationObserver(() => {
+      if (!autoScrollRef.current || preserveScrollPosition.current) return;
+      if (frame !== null) return;
+      frame = requestAnimationFrame(() => {
+        frame = null;
+        scrollDomToBottom();
+      });
+    });
+    observer.observe(target, {
+      childList: true,
+      subtree: true,
+      characterData: true,
+    });
+    return () => {
+      observer.disconnect();
+      if (frame !== null) cancelAnimationFrame(frame);
+    };
+  }, [scrollRef, scrollDomToBottom]);
+
   // Auto-load older events when the chat content doesn't overflow the
   // scroll area (no scrollbar to drag, no wheel events past 0). We
   // re-run only when the rendered list grows or `hasMore` flips, NOT
