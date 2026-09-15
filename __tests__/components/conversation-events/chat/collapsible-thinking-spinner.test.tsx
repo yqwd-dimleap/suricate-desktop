@@ -1,9 +1,10 @@
-import { describe, expect, it, vi, beforeEach } from "vitest";
-import { screen } from "@testing-library/react";
+import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
+import { screen, act } from "@testing-library/react";
 import { renderWithProviders } from "test-utils";
 import { CollapsibleThinking } from "#/components/conversation-events/chat/event-message-components/collapsible-thinking";
 import { EventMessage } from "#/components/conversation-events/chat/event-message";
 import { useAgentState } from "#/hooks/use-agent-state";
+import { clearThinkingElapsedCacheForTests } from "#/hooks/use-thinking-elapsed-seconds";
 import { AgentState } from "#/types/agent-state";
 import { ActionEvent, SecurityRisk } from "#/types/agent-server/core";
 import { ExecuteBashAction } from "#/types/agent-server/core/base/action";
@@ -12,6 +13,8 @@ import { StreamingDeltaEvent } from "#/types/agent-server/core/events/streaming-
 // NOTE: vitest.setup.ts mocks react-i18next so `t(key)` returns the key itself.
 // We therefore assert on the raw i18n keys ("THINKING$TITLE" for in-progress,
 // "OBSERVATION_MESSAGE$THINK" for settled) rather than the translated strings.
+// Elapsed duration is asserted via data-seconds because the mock drops
+// interpolation args.
 
 vi.mock("#/hooks/query/use-config", () => ({
   useConfig: () => ({
@@ -33,6 +36,15 @@ const thinkingLabel = "THINKING$TITLE";
 const thoughtLabel = "OBSERVATION_MESSAGE$THINK";
 
 describe("CollapsibleThinking — thinking label", () => {
+  beforeEach(() => {
+    clearThinkingElapsedCacheForTests();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    clearThinkingElapsedCacheForTests();
+  });
+
   it("shows the shimmer 'Thinking' label while thinking (no spinner)", () => {
     renderWithProviders(<CollapsibleThinking content={REASONING} isThinking />);
 
@@ -53,6 +65,63 @@ describe("CollapsibleThinking — thinking label", () => {
     expect(screen.queryByTestId(shimmerLabelTestId)).not.toBeInTheDocument();
     expect(screen.getByText(thoughtLabel)).toBeInTheDocument();
     expect(screen.queryByText(thinkingLabel)).not.toBeInTheDocument();
+  });
+
+  it("shows a Cursor-style compact Thinking header with elapsed seconds", () => {
+    renderWithProviders(<CollapsibleThinking content={REASONING} isThinking />);
+
+    const toggle = screen.getByTestId("collapsible-thinking-toggle");
+    expect(toggle.className).toContain("gap-1");
+    expect(screen.getByTestId(shimmerLabelTestId)).toBeInTheDocument();
+    expect(screen.getByTestId("collapsible-thinking-elapsed")).toBeInTheDocument();
+  });
+
+  it("shows the Thinking header at 0s before the first reasoning token", () => {
+    renderWithProviders(<CollapsibleThinking content="" isThinking />);
+
+    expect(screen.getByTestId("collapsible-thinking")).toBeInTheDocument();
+    expect(screen.getByTestId(shimmerLabelTestId)).toBeInTheDocument();
+    expect(screen.getByTestId("collapsible-thinking-elapsed")).toHaveAttribute(
+      "data-seconds",
+      "0",
+    );
+  });
+
+  it("ticks elapsed seconds while thinking and freezes them on settle", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-09-15T12:00:00Z"));
+
+    const { rerender } = renderWithProviders(
+      <CollapsibleThinking content={REASONING} isThinking />,
+    );
+
+    expect(screen.getByTestId("collapsible-thinking-elapsed")).toHaveAttribute(
+      "data-seconds",
+      "0",
+    );
+
+    act(() => {
+      vi.advanceTimersByTime(3500);
+    });
+    expect(screen.getByTestId("collapsible-thinking-elapsed")).toHaveAttribute(
+      "data-seconds",
+      "3",
+    );
+
+    rerender(<CollapsibleThinking content={REASONING} />);
+    expect(screen.getByTestId("collapsible-thinking-elapsed")).toHaveAttribute(
+      "data-seconds",
+      "3",
+    );
+    expect(screen.getByText(thoughtLabel)).toBeInTheDocument();
+  });
+
+  it("hides elapsed seconds for historical thoughts that never went live", () => {
+    renderWithProviders(<CollapsibleThinking content={REASONING} />);
+
+    expect(
+      screen.queryByTestId("collapsible-thinking-elapsed"),
+    ).not.toBeInTheDocument();
   });
 });
 
