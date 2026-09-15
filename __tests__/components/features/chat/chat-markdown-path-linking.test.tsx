@@ -7,16 +7,23 @@ import { WorkspaceFilesForChatContext } from "#/components/features/chat/chat-ma
 import { useFilesTabStore } from "#/stores/files-tab-store";
 
 const openWorkspaceFile = vi.fn();
+const openWorkspacePreview = vi.fn();
 
 vi.mock("#/services/canvas-ui", () => ({
   openWorkspaceFile: (...args: unknown[]) => openWorkspaceFile(...args),
+  openWorkspacePreview: (...args: unknown[]) => openWorkspacePreview(...args),
 }));
 
 vi.mock("#/hooks/use-conversation-id", () => ({
   useOptionalConversationId: () => ({ conversationId: "conv-1" }),
 }));
 
-const WORKSPACE_FILES = ["test.md", "motivational_message.md", "src/app.ts"];
+const WORKSPACE_FILES = [
+  "test.md",
+  "motivational_message.md",
+  "src/app.ts",
+  "index.html",
+];
 
 function renderAgentMessage(
   message: string,
@@ -32,37 +39,74 @@ function renderAgentMessage(
 describe("assistant chat Markdown path linking", () => {
   beforeEach(() => {
     openWorkspaceFile.mockClear();
+    openWorkspacePreview.mockClear();
     ConversationService.setCurrentConversation(null);
     useFilesTabStore.setState({
       selectedPath: null,
       selectedConversationId: null,
       openPaths: [],
+      stickyReveals: {},
     });
   });
 
-  it("opens the Files drawer when an existing workspace path is clicked", async () => {
+  it("opens the Preview drawer for previewable workspace paths", async () => {
+    const user = userEvent.setup();
+
+    renderAgentMessage("Created `index.html`");
+
+    await user.click(screen.getByTestId("markdown-file-path-link"));
+
+    expect(openWorkspacePreview).toHaveBeenCalledWith("index.html", "conv-1");
+    expect(openWorkspaceFile).not.toHaveBeenCalled();
+  });
+
+  it("opens the Preview drawer for markdown without a line range", async () => {
     const user = userEvent.setup();
 
     renderAgentMessage("Created `test.md`");
 
     await user.click(screen.getByTestId("markdown-file-path-link"));
 
-    expect(openWorkspaceFile).toHaveBeenCalledWith("test.md", "conv-1");
+    expect(openWorkspacePreview).toHaveBeenCalledWith("test.md", "conv-1");
+    expect(openWorkspaceFile).not.toHaveBeenCalled();
   });
 
-  it("opens the Files drawer for bold-emphasized existing paths", async () => {
+  it("keeps line-range markdown refs on the Files drawer", async () => {
     const user = userEvent.setup();
 
-    renderAgentMessage(
-      "The file **motivational_message.md** has been created with an inspiring quote.",
-    );
+    renderAgentMessage("See `test.md:3`", ["test.md"]);
 
     await user.click(screen.getByTestId("markdown-file-path-link"));
 
-    expect(openWorkspaceFile).toHaveBeenCalledWith(
-      "motivational_message.md",
-      "conv-1",
-    );
+    expect(openWorkspaceFile).toHaveBeenCalledWith("test.md", "conv-1", {
+      reveal: { startLine: 3, endLine: 3 },
+    });
+    expect(openWorkspacePreview).not.toHaveBeenCalled();
+  });
+
+  it("opens the Files drawer for bold-emphasized existing source paths", async () => {
+    const user = userEvent.setup();
+
+    renderAgentMessage("See **src/app.ts** please.");
+
+    await user.click(screen.getByTestId("markdown-file-path-link"));
+
+    expect(openWorkspaceFile).toHaveBeenCalledWith("src/app.ts", "conv-1", {
+      reveal: undefined,
+    });
+    expect(openWorkspacePreview).not.toHaveBeenCalled();
+  });
+
+  it("passes a Cursor-style line range when the path includes :line", async () => {
+    const user = userEvent.setup();
+
+    renderAgentMessage("See `src/app.ts:12-18`", ["src/app.ts"]);
+
+    await user.click(screen.getByTestId("markdown-file-path-link"));
+
+    expect(openWorkspaceFile).toHaveBeenCalledWith("src/app.ts", "conv-1", {
+      reveal: { startLine: 12, endLine: 18 },
+    });
   });
 
   it("links absolute nested working-dir paths using ConversationService working_dir", async () => {
@@ -78,7 +122,9 @@ describe("assistant chat Markdown path linking", () => {
 
     await user.click(screen.getByTestId("markdown-file-path-link"));
 
-    expect(openWorkspaceFile).toHaveBeenCalledWith("src/index.ts", "conv-1");
+    expect(openWorkspaceFile).toHaveBeenCalledWith("src/index.ts", "conv-1", {
+      reveal: undefined,
+    });
   });
 
   it("does not link paths that are not in the workspace", () => {
