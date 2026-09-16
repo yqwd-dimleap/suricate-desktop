@@ -47,7 +47,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { spawnSync } from "node:child_process";
 
-import { isExternalBrowsableUrl, isLoopbackAppUrl } from "./lib/window-url-policy.mjs";
+import { isExternalBrowsableUrl, isLoopbackAppUrl, buildDesktopAppOrigin } from "./lib/window-url-policy.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -255,12 +255,12 @@ async function waitForUrl(url, timeoutMs = 120_000, intervalMs = 600) {
  * On first launch, `uvx` has to download a Python toolchain and install
  * `openhands-agent-server` and its workspace deps from PyPI, which can
  * easily take a few minutes on a slow network. We poll the route end-to-end
- * (through ingress on port 8000, so a missing or restarted ingress is also
- * caught) instead of just probing the static-server fallback that
+ * (through the allocated ingress origin, so a missing or restarted ingress
+ * is also caught) instead of just probing the static-server fallback that
  * `waitForUrl` would accept.
  */
 async function waitForAgentServer(
-  url = "http://localhost:8000/server_info",
+  url,
   timeoutMs = 10 * 60_000,
   intervalMs = 1_000,
 ) {
@@ -288,6 +288,8 @@ async function waitForAgentServer(
 
 let loadingWin = null;
 let mainWin = null;
+/** Set after a successful stack start — reused when macOS re-opens a window. */
+let desktopAppOrigin = null;
 
 // Collapsed splash size — loading.html's .container height must match. The
 // expanded height reveals the startup-log console below it ("Show details").
@@ -353,7 +355,11 @@ function createLoadingWindow() {
   loadingWin.once("ready-to-show", () => loadingWin?.show());
 }
 
-function createMainWindow() {
+function createMainWindow(appOrigin = desktopAppOrigin) {
+  if (!appOrigin) {
+    throw new Error("Cannot open the main window before the stack reports an origin.");
+  }
+  desktopAppOrigin = appOrigin;
   mainWin = new BrowserWindow({
     width: 1440,
     height: 900,
@@ -371,7 +377,7 @@ function createMainWindow() {
     },
   });
 
-  mainWin.loadURL("http://localhost:8000");
+  mainWin.loadURL(appOrigin);
 
   mainWin.once("ready-to-show", () => {
     loadingWin?.destroy();
@@ -583,7 +589,7 @@ function setBootPhase(message) {
  * exits). Appended to the startup-failure dialog: a packaged app launched
  * from Finder has stdout/stderr wired to /dev/null, so without this a
  * crashed ingress/static-server surfaces only as an opaque "timed out
- * waiting for http://localhost:8000" message.
+ * waiting for the ingress origin" message.
  */
 const recentServiceErrors = [];
 
@@ -651,6 +657,14 @@ async function startStack() {
         "Check your internet connection and try again.",
     );
   }
+
+  if (!result?.config?.ingressPort) {
+    throw new Error(
+      "The desktop stack started without reporting an ingress port.",
+    );
+  }
+
+  return result.config;
 }
 
 // ── App lifecycle ─────────────────────────────────────────────────────────────
@@ -685,11 +699,12 @@ app.whenReady().then(async () => {
 
   try {
     setBootPhase("Starting backend services…");
-    await startStack();
+    const stackConfig = await startStack();
+    const appOrigin = buildDesktopAppOrigin(stackConfig.ingressPort);
 
     // Stage 1: ingress proxy is bound (anything < 500 on /).
     setBootPhase("Waiting for proxy…");
-    await waitForUrl("http://localhost:8000");
+    await waitForUrl(appOrigin);
 
     // Stage 2: the agent-server behind the proxy is actually serving
     // requests. `startStack()` already waited for this internally, but we
@@ -697,14 +712,14 @@ app.whenReady().then(async () => {
     // window between processes binding, we still open the main window with
     // a live backend. Cheap (a single 200 response) when everything is up.
     setBootPhase("Connecting to agent server…");
-    await waitForAgentServer("http://localhost:8000/server_info", 60_000);
+    await waitForAgentServer(`${appOrigin}/server_info`, 60_000);
 
     setBootPhase("Ready.");
-    createMainWindow();
+    createMainWindow(appOrigin);
   } catch (err) {
     const summary =
       err.message +
-      " Ensure ports 8000, 18000, and 18001 are free, then try again.";
+      " If another Suricate / OpenHands stack is running, quit it and try again.";
     // Record the failure in the terminal and the startup-log buffer so it
     // shows (and copies) as the final console line.
     console.error("[desktop] Startup failed:", err);
@@ -742,7 +757,8 @@ app.whenReady().then(async () => {
 //
 // Windows has no real POSIX signals: process.kill(pid, "SIGTERM") would
 // terminate this process WITHOUT running the "SIGTERM" listener, skipping
-// cleanup and orphaning the children on ports 8000/18000/18001 (the next
+// cleanup and orphaning the children on the allocated ingress / agent-server /
+// automation ports (the next
 // launch then fails at startup). process.emit("SIGTERM") runs the same
 // registered handler in-process instead.
 
@@ -780,6 +796,6 @@ app.on("window-all-closed", () => {
 app.on("activate", () => {
   if (BrowserWindow.getAllWindows().length === 0) {
     // The backend is already running — just open a new renderer window.
-    if (mainWin === null) createMainWindow();
+    if (mainWin === null && desktopAppOrigin) createMainWindow(desktopAppOrigin);
   }
 });

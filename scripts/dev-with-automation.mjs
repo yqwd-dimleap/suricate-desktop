@@ -6,19 +6,18 @@
  *
  * Uses a standalone ingress proxy to route traffic to multiple backends.
  *
- * Architecture:
+ * Architecture (preferred ports; when busy the launcher picks free alternatives):
  *   ┌──────────────────────────────────────────────────────────────────────────┐
- *   │              http://localhost:8000 (Ingress Proxy)                       │
+ *   │              http://localhost:<ingress> (Ingress Proxy, prefer 8000)     │
  *   │              /api/automation/* → Automation Backend                      │
  *   │              /api/*, /sockets  → Agent Server                            │
- *   │              /*                → Vite Dev Server                         │
+ *   │              /*                → Vite Dev Server / static frontend       │
  *   └──────────────────────────────────────────────────────────────────────────┘
  *          │                    │                         │
  *          ▼                    ▼                         ▼
  *   ┌─────────────┐    ┌───────────────┐         ┌──────────────────┐
- *   │ Vite        │    │ Agent Server  │         │ Automation       │
- *   │ :3001       │    │ (uvx) :18000  │         │ Backend (uvx)    │
- *   │             │    │               │         │ :18001           │
+ *   │ Frontend    │    │ Agent Server  │         │ Automation       │
+ *   │ prefer :3001│    │ prefer :18000 │         │ prefer :18001    │
  *   └─────────────┘    └───────────────┘         └──────────────────┘
  *
  * Usage:
@@ -53,12 +52,12 @@ import { setTimeout as delay } from "node:timers/promises";
 import process from "node:process";
 
 import {
-  assertPortsFree,
   buildAgentServerCommand,
   buildSafeDevConfig,
   buildAgentServerEnv,
   buildNpmScriptCommand,
   buildRuntimeServicesInfo,
+  findFreePorts,
   formatMissingUvxGuidance,
   validateFrontendDependencies,
   validateLocalAgentServerPath,
@@ -419,7 +418,9 @@ async function buildConfig(args, env = process.env) {
     process.exit(1);
   }
 
-  // Preferred ports (from env or defaults).
+  // Preferred ports (from env or defaults). Prefer these when free; otherwise
+  // fall back to OS-assigned free ports so a leftover stack / other app on
+  // 8000/18000/18001 does not block startup (desktop and `npm run dev`).
   // OH_CANVAS_SAFE_BACKEND_PORT / OH_CANVAS_SAFE_AUTOMATION_PORT /
   // OH_CANVAS_SAFE_VITE_PORT allow tests (and advanced users) to redirect
   // internal service ports without affecting the production default.
@@ -430,22 +431,66 @@ async function buildConfig(args, env = process.env) {
     parseInt(env.OH_CANVAS_SAFE_AUTOMATION_PORT, 10) || DEFAULT_AUTOMATION_PORT;
   const preferredVitePort = parseInt(env.OH_CANVAS_SAFE_VITE_PORT, 10) || 3001;
 
-  // Fail fast if any preferred port for a service in this mode is already in use.
-  const requiredPorts = [{ name: "ingress", port: preferredIngressPort }];
+  const preferredPorts = [{ name: "ingress", preferred: preferredIngressPort }];
   if (launchAgentServer) {
-    requiredPorts.push({ name: "agent-server", port: preferredBackendPort });
+    preferredPorts.push({
+      name: "agent-server",
+      preferred: preferredBackendPort,
+    });
   }
   if (launchAutomation) {
-    requiredPorts.push({ name: "automation", port: preferredAutomationPort });
+    preferredPorts.push({
+      name: "automation",
+      preferred: preferredAutomationPort,
+    });
   }
   if (launchFrontend) {
-    requiredPorts.push({ name: "frontend", port: preferredVitePort });
+    preferredPorts.push({ name: "frontend", preferred: preferredVitePort });
   }
 
-  logStep("ports", "Checking ports...");
-  await assertPortsFree(requiredPorts);
+  logStep("ports", "Allocating ports...");
+  const allocated = await findFreePorts(preferredPorts);
 
-  const vscodePort = preferredBackendPort + 1000;
+  const ingressPort = allocated.ingress;
+  const agentServerPort = allocated["agent-server"] ?? preferredBackendPort;
+  const autoBackendPort = allocated.automation ?? preferredAutomationPort;
+  const vitePort = allocated.frontend ?? preferredVitePort;
+
+  // VS Code binds beside the agent-server. Prefer agentServer+1000, then any
+  // free port — do not derive from the *preferred* backend port after a
+  // fallback, or the editor can collide with an unrelated listener.
+  const preferredVscodePort = agentServerPort + 1000;
+  let vscodePort = preferredVscodePort;
+  if (launchAgentServer) {
+    const vscodeAllocated = await findFreePorts([
+      { name: "vscode", preferred: preferredVscodePort },
+    ]);
+    vscodePort = vscodeAllocated.vscode;
+  }
+
+  const preferredByName = {
+    ingress: preferredIngressPort,
+    "agent-server": preferredBackendPort,
+    automation: preferredAutomationPort,
+    frontend: preferredVitePort,
+  };
+  for (const [name, actual] of Object.entries(allocated)) {
+    const preferred = preferredByName[name];
+    if (preferred != null && actual !== preferred) {
+      logService(
+        "ports",
+        `${name}: preferred ${preferred} busy → using ${actual}`,
+        c.yellow,
+      );
+    }
+  }
+  if (launchAgentServer && vscodePort !== preferredVscodePort) {
+    logService(
+      "ports",
+      `vscode: preferred ${preferredVscodePort} busy → using ${vscodePort}`,
+      c.yellow,
+    );
+  }
 
   // API key — shared by both agent-server and automation backend.
   // Both validate it via the `X-Session-API-Key` header.
@@ -458,7 +503,7 @@ async function buildConfig(args, env = process.env) {
   const safeConfig = buildSafeDevConfig(projectRoot, {
     ...env,
     OH_CANVAS_SAFE_STATE_DIR: stateDir,
-    OH_CANVAS_SAFE_BACKEND_PORT: preferredBackendPort.toString(),
+    OH_CANVAS_SAFE_BACKEND_PORT: agentServerPort.toString(),
     OH_CANVAS_SAFE_VSCODE_PORT: vscodePort.toString(),
   });
   const sessionApiKey = safeConfig.sessionApiKey;
@@ -477,13 +522,14 @@ async function buildConfig(args, env = process.env) {
   }
 
   return {
-    // Ingress port (main entry point)
-    ingressPort: preferredIngressPort,
+    // Ingress port (main entry point) — may differ from the preferred default
+    // when that port was busy at launch.
+    ingressPort,
 
     // Service ports (internal)
-    agentServerPort: preferredBackendPort,
-    autoBackendPort: preferredAutomationPort,
-    vitePort: preferredVitePort,
+    agentServerPort,
+    autoBackendPort,
+    vitePort,
     vscodePort,
     // Prefix the editor is served under on the ingress origin. Carried on the
     // config so the route table and the agent-server env are built from one
@@ -1579,19 +1625,32 @@ async function main(options = {}) {
     startAutomationBackend(config);
   }
 
-  // 4. Start frontend server (Vite dev server OR static server)
+  // 4. Start frontend server (Vite dev server OR static server) and wait
+  // until it actually answers. Ingress defaults to this origin — if we race
+  // ahead while the port is free-but-soon-stolen (or our spawn dies), a
+  // foreign process on the same port (e.g. `npx @openhands/agent-canvas`)
+  // silently becomes the UI.
   if (config.launchFrontend) {
     if (useStaticMode) {
       startStaticFrontend(config, staticDir);
     } else {
       startVite(config);
     }
+    const frontendReady = await waitForService(
+      useStaticMode ? "static" : "vite",
+      `http://127.0.0.1:${config.vitePort}/`,
+      30_000,
+    );
+    if (!frontendReady) {
+      throw new Error(
+        `Frontend failed to start on port ${config.vitePort}. ` +
+          "Another process may be bound to that port (check for a leftover " +
+          "`agent-canvas` / Suricate instance), then try again.",
+      );
+    }
   }
 
-  // 5. Wait for services to be ready
-  await delay(2000);
-
-  // 6. Start ingress proxy (routes traffic only to running services)
+  // 5. Start ingress proxy (routes traffic only to running services)
   startIngress(config);
 
   // Wait for ingress to start
