@@ -45,14 +45,17 @@ export const VSCODE_BASE_PATH = SHARED_DEFAULTS.paths.vscodeBasePath;
 const DEFAULT_VITE_PORT = 3001;
 const DEFAULT_WAIT_TIMEOUT_MS = 30_000;
 const DEFAULT_AGENT_SERVER_PACKAGE = SHARED_DEFAULTS.packages.agentServer;
-const AGENT_SERVER_GIT_REPO = "https://github.com/OpenHands/software-agent-sdk";
+const AGENT_SERVER_GIT_REPO =
+  SHARED_DEFAULTS.agentServerSource?.gitRepo ??
+  "https://github.com/yqwd-dimleap/suricate-sdk";
+const DEFAULT_AGENT_SERVER_GIT_REF =
+  SHARED_DEFAULTS.agentServerSource?.gitRef ?? "v0.0.1-rc";
 const LOCAL_AGENT_SERVER_SUBDIRS = [
   "openhands-agent-server",
   "openhands-sdk",
   "openhands-tools",
   "openhands-workspace",
 ];
-const DEFAULT_AGENT_SERVER_VERSION = SHARED_DEFAULTS.versions.agentServer;
 // Temporary transitive-dep pin: openhands-sdk 1.40.1 leaves agent-client-protocol
 // unbounded (>=0.10.1), but acp 0.11.0 reordered the ACP prompt() args and breaks
 // the SDK's ACP client. Hold acp <0.11 until a fixed SDK ships. See config/defaults.json.
@@ -447,17 +450,16 @@ export const AGENT_SERVER_IMPORT_MODULES =
  * Build the uvx command and arguments for running agent-server.
  *
  * Environment variables (highest precedence first):
- * - OH_AGENT_SERVER_LOCAL_PATH: Absolute path to a software-agent-sdk checkout.
- *   Runs the local checkout via uvx with editable installs of the workspace
- *   packages (openhands-sdk, openhands-tools, openhands-workspace) so source
- *   edits are picked up without a manual reinstall. The agent-server itself
- *   is rebuilt from local source on each invocation (--reinstall).
- * - OH_AGENT_SERVER_GIT_REF: Git commit SHA or branch name
+ * - OH_AGENT_SERVER_LOCAL_PATH: Absolute path to a suricate-sdk (or compatible)
+ *   checkout. Runs the local checkout via uvx with editable installs of the
+ *   workspace packages (openhands-sdk, openhands-tools, openhands-workspace) so
+ *   source edits are picked up without a manual reinstall. The agent-server
+ *   itself is rebuilt from local source on each invocation (--reinstall).
+ * - OH_AGENT_SERVER_GIT_REF: Git commit SHA, branch, or tag name
  * - OH_AGENT_SERVER_VERSION: Specific PyPI version (e.g., "1.46.0")
  *
- * If none are set, defaults to the released version specified by
- * DEFAULT_AGENT_SERVER_VERSION. Set OH_AGENT_SERVER_GIT_REF to use a
- * git branch or commit instead.
+ * If none are set, defaults to AGENT_SERVER_GIT_REPO @ DEFAULT_AGENT_SERVER_GIT_REF
+ * (Suricate SDK). Set OH_AGENT_SERVER_VERSION to force a PyPI pin instead.
  *
  * @param {Record<string, string | undefined>} env
  * @returns {{ command: string, args: string[], source: string }}
@@ -491,9 +493,9 @@ export function buildAgentServerCommand(env = process.env) {
       "agent-server",
     );
     source = `local (${localPath})`;
-  } else if (gitRef) {
+  } else if (gitRef || !version) {
     // Use git ref with subdirectory syntax for uv workspace monorepo.
-    // The software-agent-sdk repo has packages in subdirectories:
+    // suricate-sdk (and upstream software-agent-sdk) keep packages in:
     // openhands-agent-server/, openhands-sdk/, openhands-tools/, openhands-workspace/
     // All four must come from the same ref so inter-package APIs stay in sync.
     //
@@ -501,7 +503,10 @@ export function buildAgentServerCommand(env = process.env) {
     // string as the current PyPI release (e.g. both "1.26.0"). Without it, uv
     // silently reuses the cached PyPI wheels and the git ref is never actually
     // used, even though it was explicitly requested.
-    const baseGitUrl = `git+${AGENT_SERVER_GIT_REPO}@${gitRef}`;
+    //
+    // Default (no env overrides): Suricate SDK git tag from config/defaults.json.
+    const effectiveGitRef = gitRef || DEFAULT_AGENT_SERVER_GIT_REF;
+    const baseGitUrl = `git+${AGENT_SERVER_GIT_REPO}@${effectiveGitRef}`;
     uvxArgs.push(
       "--reinstall",
       "--from",
@@ -516,7 +521,9 @@ export function buildAgentServerCommand(env = process.env) {
       AGENT_SERVER_POSTHOG_CONSTRAINT,
       "agent-server",
     );
-    source = `git (${gitRef})`;
+    source = gitRef
+      ? `git (${effectiveGitRef})`
+      : `git (${effectiveGitRef}, default)`;
   } else if (version) {
     // Use specific PyPI version: uvx --from openhands-agent-server==version agent-server
     // The package name differs from the executable name, so we need --from syntax
@@ -537,25 +544,6 @@ export function buildAgentServerCommand(env = process.env) {
     uvxArgs.push("--with", AGENT_SERVER_POSTHOG_CONSTRAINT);
     uvxArgs.push("agent-server");
     source = `PyPI (${version})`;
-  } else {
-    // Default to released PyPI version
-    // Pin all SDK packages to the same version for consistency
-    uvxArgs.push(
-      "--from",
-      `${DEFAULT_AGENT_SERVER_PACKAGE}==${DEFAULT_AGENT_SERVER_VERSION}`,
-      "--with",
-      `openhands-sdk==${DEFAULT_AGENT_SERVER_VERSION}`,
-      "--with",
-      `openhands-tools==${DEFAULT_AGENT_SERVER_VERSION}`,
-      "--with",
-      `openhands-workspace==${DEFAULT_AGENT_SERVER_VERSION}`,
-    );
-    if (AGENT_CLIENT_PROTOCOL_CONSTRAINT) {
-      uvxArgs.push("--with", AGENT_CLIENT_PROTOCOL_CONSTRAINT);
-    }
-    uvxArgs.push("--with", AGENT_SERVER_POSTHOG_CONSTRAINT);
-    uvxArgs.push("agent-server");
-    source = `PyPI (${DEFAULT_AGENT_SERVER_VERSION}, default)`;
   }
 
   // Everything after the executable name is an agent-server CLI argument.

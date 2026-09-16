@@ -5,6 +5,11 @@
     "agentCanvas": "1.18.0",
     "automation": "1.11.1"
   },
+  "agentServerSource": {
+    "_comment": "Suricate Desktop defaults to the native agent-server from suricate-sdk via git (not PyPI). OH_AGENT_SERVER_LOCAL_PATH / OH_AGENT_SERVER_GIT_REF / OH_AGENT_SERVER_VERSION still override at runtime.",
+    "gitRepo": "https://github.com/yqwd-dimleap/suricate-sdk",
+    "gitRef": "v0.0.1-rc"
+  },
   "compatibility": {
     "minimumAgentServer": "1.28.0"
   },
