@@ -8,6 +8,7 @@ import { useFilesTabStore } from "#/stores/files-tab-store";
 import { useWorkspaceFiles } from "#/hooks/query/use-workspace-files";
 import { useWorkspaceFileContent } from "#/hooks/query/use-workspace-file-content";
 import { useAutoRefreshFilesOnEdit } from "#/hooks/use-auto-refresh-files-on-edit";
+import { useClearStickyRevealsWhenClean } from "#/hooks/use-clear-sticky-reveals-when-clean";
 import { useOptionalConversationId } from "#/hooks/use-conversation-id";
 import { useResizableDrawerWidth } from "#/hooks/use-resizable-drawer-width";
 import {
@@ -45,6 +46,8 @@ function FilesTab() {
 
   // Keep the list / content caches fresh as the agent writes files.
   useAutoRefreshFilesOnEdit();
+  // Drop sticky line highlights once a path is clean vs HEAD (committed / pushed).
+  useClearStickyRevealsWhenClean();
 
   const { data: activeConversation } = useActiveConversation();
   const workspacePath = activeConversation?.workspace?.working_dir;

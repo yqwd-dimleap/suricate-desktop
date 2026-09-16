@@ -40,43 +40,55 @@ export function GenericEventMessage({
   const [hasFocusWithin, setHasFocusWithin] = React.useState(false);
   const timestampLabel = formatEventTimestamp(timestamp, i18n?.language);
 
+  const toggleDetails = (
+    event: React.MouseEvent<HTMLElement> | React.KeyboardEvent<HTMLElement>,
+  ) => {
+    if (!details) {
+      return;
+    }
+    setShowDetails((prev) => !prev);
+    if ("detail" in event && event.detail > 0) {
+      setIsHovered(false);
+      event.currentTarget.blur();
+    }
+  };
+
+  const ChevronIcon = showDetails ? ArrowUp : ArrowDown;
   const chevron = details ? (
-    <button
-      type="button"
-      onClick={(event) => {
-        setShowDetails((prev) => !prev);
-        if (event.detail > 0) {
-          setIsHovered(false);
-          event.currentTarget.blur();
-        }
-      }}
-      className="cursor-pointer text-left"
-      aria-label={
-        showDetails ? t(I18nKey.BUTTON$COLLAPSE) : t(I18nKey.BUTTON$EXPAND)
-      }
-    >
-      {showDetails ? (
-        <ArrowUp
-          className={cn(
-            "h-4 w-4 inline fill-[var(--oh-muted)]",
-            chevronPosition === "after" ? "ml-2" : "mr-2",
-          )}
-        />
-      ) : (
-        <ArrowDown
-          className={cn(
-            "h-4 w-4 inline fill-[var(--oh-muted)]",
-            chevronPosition === "after" ? "ml-2" : "mr-2",
-          )}
-        />
+    <ChevronIcon
+      aria-hidden
+      className={cn(
+        "inline h-4 w-4 fill-[var(--oh-muted)]",
+        chevronPosition === "after" ? "ml-2" : "mr-2",
       )}
-    </button>
+    />
   ) : null;
 
   const titleContent = (
     <div
       data-testid="generic-event-message-title"
-      className="flex items-center"
+      role={details ? "button" : undefined}
+      tabIndex={details ? 0 : undefined}
+      aria-expanded={details ? showDetails : undefined}
+      aria-label={
+        details
+          ? showDetails
+            ? t(I18nKey.BUTTON$COLLAPSE)
+            : t(I18nKey.BUTTON$EXPAND)
+          : undefined
+      }
+      className={cn("flex items-center", details && "cursor-pointer text-left")}
+      onClick={details ? toggleDetails : undefined}
+      onKeyDown={
+        details
+          ? (event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                toggleDetails(event);
+              }
+            }
+          : undefined
+      }
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
       onFocusCapture={() => setHasFocusWithin(true)}

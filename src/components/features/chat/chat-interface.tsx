@@ -16,13 +16,14 @@ import { useFilteredEvents } from "#/hooks/use-filtered-events";
 import { useScrollToBottom } from "#/hooks/use-scroll-to-bottom";
 import { useLoadOlderEvents } from "#/hooks/use-load-older-events";
 import { useAutoRefreshFilesOnEdit } from "#/hooks/use-auto-refresh-files-on-edit";
+import { useAutoApproveSafeActions } from "#/hooks/use-auto-approve-safe-actions";
+import { useSyncAgentReviewFromEvents } from "#/hooks/use-sync-agent-review-from-events";
 import { WorkspaceFilesForChatProvider } from "./chat-markdown-path-code";
-import { TypingIndicator } from "./typing-indicator";
 import { ChatSuggestions } from "./chat-suggestions";
 import { ScrollProvider } from "#/context/scroll-context";
 import { useInitialQueryStore } from "#/stores/initial-query-store";
 import { useSendMessage } from "#/hooks/use-send-message";
-import { useAgentState, usePlanningAgentState } from "#/hooks/use-agent-state";
+import { useAgentState } from "#/hooks/use-agent-state";
 import { useIsArchivedConversation } from "#/hooks/use-is-archived-conversation";
 import { useHandleBuildPlanClick } from "#/hooks/use-handle-build-plan-click";
 
@@ -65,6 +66,8 @@ function getEntryPoint(
 
 export function ChatInterface() {
   useAutoRefreshFilesOnEdit();
+  useAutoApproveSafeActions();
+  useSyncAgentReviewFromEvents();
 
   const { trackInitialQuerySubmitted, trackUserMessageSent } = useTracking();
   const { setMessageToSend, conversationMode, planContent } =
@@ -115,7 +118,6 @@ export function ChatInterface() {
   } = useNewConversationCommand();
 
   const { curAgentState } = useAgentState();
-  const { isPlanningAgentRunning } = usePlanningAgentState();
   const { handleBuildPlanClick } = useHandleBuildPlanClick();
 
   // Cloud conversations whose sandbox is MISSING or ERROR are read-only:
@@ -434,6 +436,39 @@ export function ChatInterface() {
     scrollDomToBottom,
   ]);
 
+  // Stick-to-bottom while content GROWS in place: streamed thinking / answer
+  // text is merged into the same event (length never changes), so the
+  // length-based effect above misses it. A MutationObserver on the scroll
+  // container follows every DOM mutation (streamed text, expanding cards) —
+  // but only while `autoScroll` is on, which the user turns off by
+  // scrolling up, and never while a "load older" position restore is pending.
+  const autoScrollRef = React.useRef(autoScroll);
+  React.useEffect(() => {
+    autoScrollRef.current = autoScroll;
+  }, [autoScroll]);
+  React.useEffect(() => {
+    const target = scrollRef.current;
+    if (!target) return;
+    let frame: number | null = null;
+    const observer = new MutationObserver(() => {
+      if (!autoScrollRef.current || preserveScrollPosition.current) return;
+      if (frame !== null) return;
+      frame = requestAnimationFrame(() => {
+        frame = null;
+        scrollDomToBottom();
+      });
+    });
+    observer.observe(target, {
+      childList: true,
+      subtree: true,
+      characterData: true,
+    });
+    return () => {
+      observer.disconnect();
+      if (frame !== null) cancelAnimationFrame(frame);
+    };
+  }, [scrollRef, scrollDomToBottom]);
+
   // Auto-load older events when the chat content doesn't overflow the
   // scroll area (no scrollbar to drag, no wheel events past 0). We
   // re-run only when the rendered list grows or `hasMore` flips, NOT
@@ -651,14 +686,7 @@ export function ChatInterface() {
                       <div className="absolute left-1/2 transform -translate-x-1/2 bottom-0 pointer-events-auto">
                         <ScrollToBottomButton onClick={scrollDomToBottom} />
                       </div>
-                    ) : (
-                      (curAgentState === AgentState.RUNNING ||
-                        isPlanningAgentRunning) && (
-                        <div className="pointer-events-none absolute inset-x-9 bottom-0 flex justify-center">
-                          <TypingIndicator events={allConversationEvents} />
-                        </div>
-                      )
-                    )}
+                    ) : null}
                   </div>
                 </div>
 

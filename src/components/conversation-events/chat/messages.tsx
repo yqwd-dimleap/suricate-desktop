@@ -2,13 +2,16 @@ import React from "react";
 import { OpenHandsEvent } from "#/types/agent-server/core";
 import { EventMessage } from "./event-message";
 import { usePlanPreviewEvents } from "./hooks/use-plan-preview-events";
-import { groupEvents } from "./group-events";
+import { projectTimeline } from "./project-timeline";
 import { EventGroup } from "./event-message-components/event-group";
 import { ThoughtEventMessage } from "./event-message-components/thought-event-message";
 import { useModelStore } from "#/stores/model-store";
 import { ModelMessages } from "#/components/features/chat/model-messages";
 import { useOptionalConversationId } from "#/hooks/use-conversation-id";
-import { ConversationConfirmationButtons } from "#/components/shared/buttons/conversation-confirmation-buttons";
+import { ConversationConfirmationCard } from "#/components/shared/buttons/conversation-confirmation-card";
+import { useAgentState } from "#/hooks/use-agent-state";
+import { useEventMessageStore } from "#/stores/event-message-store";
+import { AgentState } from "#/types/agent-state";
 
 interface MessagesProps {
   messages: OpenHandsEvent[]; // UI events (actions replaced by observations)
@@ -49,15 +52,27 @@ export const Messages: React.FC<MessagesProps> = React.memo(
       );
     };
 
-    // Fold consecutive action/observation events into collapsible groups so a
-    // long sequence of tool calls doesn't dominate the chat scroll. Items that
-    // can't be grouped (or that fall in a short run) are still rendered one by
-    // one, identically to before. Agent thoughts attached to an action are
-    // hoisted out as their own rendered item so they always show up in the
-    // message pane and a thought between actions starts a fresh group.
+    // Project the event history into ordered timeline rows: consecutive
+    // action/observation events fold into collapsible groups, agent thoughts
+    // are hoisted as their own rows, and a pending confirmation renders as a
+    // card anchored right after the row holding the action awaiting approval
+    // (see project-timeline.ts for the full contract).
+    const { curAgentState } = useAgentState();
+    const submittedEventIds = useEventMessageStore(
+      (state) => state.submittedEventIds,
+    );
+    const awaitingConfirmation =
+      curAgentState === AgentState.AWAITING_USER_CONFIRMATION;
+
     const renderedItems = React.useMemo(
-      () => groupEvents(messages, undefined, allEvents),
-      [messages, allEvents],
+      () =>
+        projectTimeline({
+          events: messages,
+          allEvents,
+          awaitingConfirmation,
+          submittedEventIds,
+        }),
+      [messages, allEvents, awaitingConfirmation, submittedEventIds],
     );
 
     const renderEventMessage = (
@@ -79,6 +94,15 @@ export const Messages: React.FC<MessagesProps> = React.memo(
     return (
       <>
         {renderedItems.map((item, itemIndex) => {
+          if (item.kind === "confirmation") {
+            return (
+              <ConversationConfirmationCard
+                key={`confirmation-${item.event.id}`}
+                event={item.event}
+              />
+            );
+          }
+
           if (item.kind === "single") {
             return (
               <React.Fragment key={`single-${item.event.id}`}>
@@ -103,8 +127,13 @@ export const Messages: React.FC<MessagesProps> = React.memo(
           // A group is "finalized" once another rendered item appears after
           // it, signalling the agent has moved on. While the group is still
           // the live tail, it keeps showing the latest action title as its
-          // prominent summary.
-          const isFinalized = itemIndex < renderedItems.length - 1;
+          // prominent summary. A confirmation card anchored right after the
+          // group doesn't finalize it — the pending action is still live.
+          const isFinalized = renderedItems
+            .slice(itemIndex + 1)
+            .some((later) => later.kind !== "confirmation");
+          const awaitingConfirmationHere =
+            renderedItems[itemIndex + 1]?.kind === "confirmation";
           const groupKey = item.events[0]?.id ?? `group-${item.startIndex}`;
           return (
             <React.Fragment key={`group-${groupKey}`}>
@@ -112,6 +141,7 @@ export const Messages: React.FC<MessagesProps> = React.memo(
                 events={item.events}
                 allEvents={allEvents}
                 isFinalized={isFinalized}
+                defaultExpanded={awaitingConfirmationHere}
               >
                 {item.events.map((event, offset) =>
                   renderEventMessage(event, item.startIndex + offset, true),
@@ -125,7 +155,6 @@ export const Messages: React.FC<MessagesProps> = React.memo(
             </React.Fragment>
           );
         })}
-        <ConversationConfirmationButtons />
       </>
     );
   },

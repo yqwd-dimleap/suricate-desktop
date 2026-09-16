@@ -174,7 +174,8 @@ describe("EventMessage - ThinkAction rendering", () => {
     ).toBeInTheDocument();
   });
 
-  it("should render ThoughtEventMessage for non-ThinkAction events", () => {
+  it("should render ThoughtEventMessage for non-ThinkAction events", async () => {
+    const user = userEvent.setup();
     const bashEvent = createBashActionEvent(
       "bash-1",
       "echo hello",
@@ -190,17 +191,21 @@ describe("EventMessage - ThinkAction rendering", () => {
       />,
     );
 
-    // The thought should be displayed for non-think actions
+    // Action thoughts use the same Cursor-style collapsible chrome.
+    expect(screen.getByTestId("collapsible-thinking")).toBeInTheDocument();
     expect(
-      screen.getByText("I need to run a command"),
-    ).toBeInTheDocument();
+      screen.queryByText("I need to run a command"),
+    ).not.toBeInTheDocument();
+
+    await user.click(screen.getByTestId("collapsible-thinking-toggle"));
+    expect(screen.getByText("I need to run a command")).toBeInTheDocument();
   });
 
   it("should render reasoning_content as a collapsible section", () => {
     const bashEvent = createBashActionEvent(
       "bash-reasoning",
       "echo hello",
-      "Running a command",
+      "",
       {
         reasoning_content: "I need to think carefully about this step.",
       },
@@ -228,7 +233,7 @@ describe("EventMessage - ThinkAction rendering", () => {
     const bashEvent = createBashActionEvent(
       "bash-thinking-blocks",
       "echo hello",
-      "Running a command",
+      "",
       {
         thinking_blocks: [
           {

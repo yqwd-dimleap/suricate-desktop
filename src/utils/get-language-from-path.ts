@@ -2,11 +2,13 @@ export const getLanguageFromPath = (path: string): string => {
   const extension = path.split(".").pop()?.toLowerCase();
   switch (extension) {
     case "js":
-    case "jsx":
       return "javascript";
+    case "jsx":
+      return "jsx";
     case "ts":
-    case "tsx":
       return "typescript";
+    case "tsx":
+      return "tsx";
     case "py":
       return "python";
     case "html":

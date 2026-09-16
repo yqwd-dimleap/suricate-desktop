@@ -7,6 +7,8 @@ import {
 
 export type ConversationTab =
   | "files"
+  | "preview"
+  | "changes"
   | "commits"
   | "browser"
   | "terminal"
@@ -29,6 +31,12 @@ interface ConversationState {
   isOverviewPanelPeeked: boolean;
   selectedTab: ConversationTab | null;
   commitsAutoExpandSection: CommitsPaneSection | null;
+  /**
+   * One-shot path to select in the Changes tab after `navigateToChanges(path)`.
+   * Also expands the matching Uncommitted row when the Commits tab is open.
+   * Cleared once the Changes / DiffChangeList consumer applies it.
+   */
+  commitsAutoExpandPath: string | null;
   images: File[];
   files: File[];
   /** Image file names (e.g. pasted screenshots) to send via file upload instead of vision embed. */
@@ -58,6 +66,7 @@ interface ConversationActions {
   setCommitsAutoExpandSection: (
     commitsAutoExpandSection: CommitsPaneSection | null,
   ) => void;
+  setCommitsAutoExpandPath: (commitsAutoExpandPath: string | null) => void;
   setShouldShownAgentLoading: (shouldShownAgentLoading: boolean) => void;
   setShouldHideSuggestions: (shouldHideSuggestions: boolean) => void;
   addImages: (images: File[]) => void;
@@ -131,6 +140,7 @@ export const useConversationStore = create<ConversationStore>()(
       isOverviewPanelPeeked: false,
       selectedTab: "files" as ConversationTab,
       commitsAutoExpandSection: null,
+      commitsAutoExpandPath: null,
       images: [],
       files: [],
       imagesMarkedUploadAsFile: [],
@@ -167,6 +177,9 @@ export const useConversationStore = create<ConversationStore>()(
 
       setCommitsAutoExpandSection: (commitsAutoExpandSection) =>
         set({ commitsAutoExpandSection }, false, "setCommitsAutoExpandSection"),
+
+      setCommitsAutoExpandPath: (commitsAutoExpandPath) =>
+        set({ commitsAutoExpandPath }, false, "setCommitsAutoExpandPath"),
 
       setShouldShownAgentLoading: (shouldShownAgentLoading) =>
         set({ shouldShownAgentLoading }, false, "setShouldShownAgentLoading"),

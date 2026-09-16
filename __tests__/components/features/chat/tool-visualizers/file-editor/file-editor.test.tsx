@@ -1,4 +1,4 @@
-import { beforeEach, describe, it, expect } from "vitest";
+import { beforeEach, describe, it, expect, vi } from "vitest";
 import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import ConversationService from "#/api/conversation-service/conversation-service.api";
@@ -11,6 +11,16 @@ import {
   fileEditorObservation,
 } from "../test-utils";
 
+vi.mock("#/hooks/query/use-active-conversation", () => ({
+  useActiveConversation: () => ({
+    data: {
+      id: "test-conversation-id",
+      workspace: { working_dir: "/workspace" },
+    },
+    isFetched: true,
+  }),
+}));
+
 const Body = fileEditorVisualizer.Body;
 
 describe("fileEditorVisualizer", () => {
@@ -22,11 +32,15 @@ describe("fileEditorVisualizer", () => {
     useConversationStore.setState({
       hasRightPanelToggled: false,
       selectedTab: "terminal",
+      commitsAutoExpandSection: null,
+      commitsAutoExpandPath: null,
+      isRightPanelShown: false,
     });
     useFilesTabStore.setState({
       selectedPath: null,
       selectedConversationId: null,
       openPaths: [],
+      stickyReveals: {},
     });
   });
 
@@ -74,22 +88,85 @@ describe("fileEditorVisualizer", () => {
     expect(container).toHaveTextContent("const x = 1;");
   });
 
-  it("renders a diff for an edit observation", () => {
-    const { container } = renderVisualizer(
+  it("renders a Cursor-style review card for an edit observation", () => {
+    renderVisualizer(
       <Body
         observation={fileEditorObservation({
           command: "str_replace",
+          path: "/workspace/app.ts",
           old_content: "line one\nOLD\nline three",
           new_content: "line one\nNEW\nline three",
         })}
       />,
     );
-    expect(container).toHaveTextContent("- OLD");
-    expect(container).toHaveTextContent("+ NEW");
+    expect(screen.getByTestId("file-editor-review-card")).toBeInTheDocument();
+    expect(screen.getByTestId("file-editor-review-filename")).toHaveTextContent(
+      "app.ts",
+    );
+    expect(screen.getByTestId("file-editor-review-stats")).toHaveTextContent(
+      "+1",
+    );
+    expect(screen.getByTestId("file-editor-review-stats")).toHaveTextContent(
+      "-1",
+    );
+    expect(screen.queryByTestId("file-path-chip")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("open-in-changes")).not.toBeInTheDocument();
+    expect(screen.getByTestId("diff-view")).toHaveTextContent("OLD");
+    expect(screen.getByTestId("diff-view")).toHaveTextContent("NEW");
+  });
+
+  it("offers Keep and Revert on mutating edit observations", async () => {
+    const user = userEvent.setup();
+    renderVisualizer(
+      <Body
+        observation={fileEditorObservation({
+          command: "str_replace",
+          path: "/workspace/app.ts",
+          old_content: "a",
+          new_content: "b",
+          prev_exist: true,
+        })}
+      />,
+    );
+
+    expect(screen.getByTestId("file-editor-keep-button")).toBeInTheDocument();
+    expect(screen.getByTestId("file-editor-revert-button")).toBeInTheDocument();
+
+    await user.click(screen.getByTestId("file-editor-keep-button"));
+
+    expect(
+      screen.queryByTestId("file-editor-keep-button"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("file-editor-revert-button"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("hides Keep/Revert for view observations", () => {
+    renderVisualizer(
+      <Body
+        observation={fileEditorObservation({
+          command: "view",
+          content: [
+            {
+              type: "text",
+              text: "1\tconst x = 1;",
+            },
+          ],
+        })}
+      />,
+    );
+
+    expect(
+      screen.queryByTestId("file-editor-review-card"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("file-editor-keep-button"),
+    ).not.toBeInTheDocument();
   });
 
   it("renders a diff when clearing a file (new_content is an empty string)", () => {
-    const { container } = renderVisualizer(
+    renderVisualizer(
       <Body
         observation={fileEditorObservation({
           command: "str_replace",
@@ -99,12 +176,12 @@ describe("fileEditorVisualizer", () => {
       />,
     );
     // The empty `new_content` must not short-circuit the diff to the fallback.
-    expect(container).toHaveTextContent("- keep");
-    expect(container).toHaveTextContent("- remove me");
+    expect(screen.getByTestId("diff-view")).toHaveTextContent("keep");
+    expect(screen.getByTestId("diff-view")).toHaveTextContent("remove me");
   });
 
   it("renders a diff when inserting into an empty file (old_content is an empty string)", () => {
-    const { container } = renderVisualizer(
+    renderVisualizer(
       <Body
         observation={fileEditorObservation({
           command: "insert",
@@ -113,12 +190,12 @@ describe("fileEditorVisualizer", () => {
         })}
       />,
     );
-    expect(container).toHaveTextContent("+ first line");
-    expect(container).toHaveTextContent("+ second line");
+    expect(screen.getByTestId("diff-view")).toHaveTextContent("first line");
+    expect(screen.getByTestId("diff-view")).toHaveTextContent("second line");
   });
 
   it("renders the inserted text for an in-flight insert action (no old_str)", () => {
-    const { container } = renderVisualizer(
+    renderVisualizer(
       <Body
         action={fileEditorAction({
           command: "insert",
@@ -129,12 +206,17 @@ describe("fileEditorVisualizer", () => {
       />,
     );
     // Inserts carry `new_str` only; the card must show it, not just the path.
-    expect(container).toHaveTextContent("/workspace/app.ts");
-    expect(container).toHaveTextContent("+ inserted line");
+    expect(screen.getByTestId("file-editor-review-filename")).toHaveTextContent(
+      "app.ts",
+    );
+    expect(screen.getByTestId("diff-view")).toHaveTextContent("inserted line");
+    expect(
+      screen.queryByTestId("file-editor-keep-button"),
+    ).not.toBeInTheDocument();
   });
 
   it("renders a diff for an in-flight str_replace action", () => {
-    const { container } = renderVisualizer(
+    renderVisualizer(
       <Body
         action={fileEditorAction({
           command: "str_replace",
@@ -144,8 +226,8 @@ describe("fileEditorVisualizer", () => {
         })}
       />,
     );
-    expect(container).toHaveTextContent("- OLD");
-    expect(container).toHaveTextContent("+ NEW");
+    expect(screen.getByTestId("diff-view")).toHaveTextContent("OLD");
+    expect(screen.getByTestId("diff-view")).toHaveTextContent("NEW");
   });
 
   it("renders the error message for a failed edit (error state)", () => {
@@ -160,7 +242,7 @@ describe("fileEditorVisualizer", () => {
     expect(screen.getByText("No replacement performed")).toBeInTheDocument();
   });
 
-  it("opens the generated file in the right drawer when its chip is clicked", async () => {
+  it("opens the generated file in the right drawer when its filename is clicked", async () => {
     const user = userEvent.setup();
     renderVisualizer(
       <Body
@@ -172,16 +254,67 @@ describe("fileEditorVisualizer", () => {
       />,
     );
 
-    await user.click(screen.getByRole("button", { name: "/workspace/app.ts" }));
+    await user.click(screen.getByTestId("file-editor-review-filename"));
 
     expect(useFilesTabStore.getState()).toMatchObject({
       selectedPath: "app.ts",
       selectedConversationId: "test-conversation-id",
+      stickyReveals: {
+        "app.ts": expect.objectContaining({
+          startLine: 1,
+          endLine: 1,
+        }),
+      },
     });
     expect(useConversationStore.getState()).toMatchObject({
       hasRightPanelToggled: true,
       selectedTab: "files",
     });
+  });
+
+  it("reveals the changed line range when opening an edit from the review card", async () => {
+    const user = userEvent.setup();
+    renderVisualizer(
+      <Body
+        observation={fileEditorObservation({
+          command: "str_replace",
+          path: "/workspace/app.ts",
+          old_content: "one\ntwo\nthree\n",
+          new_content: "one\nTWO\nthree\n",
+          prev_exist: true,
+        })}
+      />,
+    );
+
+    await user.click(screen.getByTestId("file-editor-review-filename"));
+
+    expect(useFilesTabStore.getState().stickyReveals["app.ts"]).toEqual(
+      expect.objectContaining({
+        startLine: 2,
+        endLine: 2,
+      }),
+    );
+  });
+
+  it("clears the sticky highlight when Keep is clicked", async () => {
+    const user = userEvent.setup();
+    renderVisualizer(
+      <Body
+        observation={fileEditorObservation({
+          command: "str_replace",
+          path: "/workspace/app.ts",
+          old_content: "a",
+          new_content: "b",
+          prev_exist: true,
+        })}
+      />,
+    );
+
+    await user.click(screen.getByTestId("file-editor-review-filename"));
+    expect(useFilesTabStore.getState().stickyReveals["app.ts"]).toBeDefined();
+
+    await user.click(screen.getByTestId("file-editor-keep-button"));
+    expect(useFilesTabStore.getState().stickyReveals["app.ts"]).toBeUndefined();
   });
 
   it("keeps markdown view observations as a CodeBlock, not a rich preview", () => {

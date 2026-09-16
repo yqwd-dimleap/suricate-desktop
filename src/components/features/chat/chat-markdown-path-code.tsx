@@ -3,8 +3,10 @@ import type { ExtraProps } from "react-markdown";
 import ConversationService from "#/api/conversation-service/conversation-service.api";
 import { useOptionalConversationId } from "#/hooks/use-conversation-id";
 import { useWorkspaceFiles } from "#/hooks/query/use-workspace-files";
-import { openWorkspaceFile } from "#/services/canvas-ui";
+import { openWorkspaceFile, openWorkspacePreview } from "#/services/canvas-ui";
 import { looksLikeWorkspaceFilePath, toFilesTabPath } from "#/utils/path-utils";
+import { parseRevealRangeString } from "#/utils/file-reveal-range";
+import { isPreviewableWorkspacePath } from "#/utils/is-previewable-workspace-path";
 import { cn } from "#/utils/utils";
 import { code as defaultCode } from "../markdown/code";
 import { anchor as defaultAnchor } from "../markdown/anchor";
@@ -64,23 +66,39 @@ function getPlainText(children: React.ReactNode): string | null {
  * Only link paths that currently exist in the conversation workspace.
  * workingDir comes from ConversationService — same source as navigate_to_file.
  */
-function useExistingWorkspacePath(candidate: string): string | null {
+function useExistingWorkspacePath(
+  candidate: string,
+): { path: string; range?: string } | null {
   const files = useContext(WorkspaceFilesForChatContext);
-  if (!files?.length || !looksLikeWorkspaceFilePath(candidate)) return null;
+  if (!files?.length) return null;
+
+  // Cursor-style references use `path:start-end`. Keep the range as display
+  // metadata, but validate only the file portion against the active workspace
+  // before enabling a navigation button.
+  const reference = /^(.*?):(\d+)(?:-(\d+))?$/.exec(candidate);
+  const pathCandidate = reference?.[1] ?? candidate;
+  const range = reference
+    ? reference[3]
+      ? `${reference[2]}-${reference[3]}`
+      : reference[2]
+    : undefined;
+  if (!looksLikeWorkspaceFilePath(pathCandidate)) return null;
 
   const workingDir =
     ConversationService.getCurrentConversation()?.workspace?.working_dir;
-  const normalized = toFilesTabPath(candidate, workingDir);
-  if (!normalized) return null;
-  return files.includes(normalized) ? normalized : null;
+  const path = toFilesTabPath(pathCandidate, workingDir);
+  if (!path || !files.includes(path)) return null;
+  return { path, range };
 }
 
 function ChatMarkdownPathLink({
   path,
+  range,
   className,
   children,
 }: {
   path: string;
+  range?: string;
   className?: string;
   children: React.ReactNode;
 }) {
@@ -90,14 +108,21 @@ function ChatMarkdownPathLink({
     <button
       type="button"
       data-testid="markdown-file-path-link"
-      title={path}
+      title={range ? `${path}:${range}` : path}
       className={cn(
         className,
         "cursor-pointer rounded border border-surface-raised bg-surface-raised px-[0.4em] py-[0.2em] font-mono text-foreground hover:underline",
       )}
       onClick={(event) => {
         event.stopPropagation();
-        openWorkspaceFile(path, conversationId);
+        const reveal = parseRevealRangeString(range);
+        // Line reveals always go to Files. Previewable artifacts without a
+        // line range open in the Preview tab (Cursor-style canvas surface).
+        if (!reveal && isPreviewableWorkspacePath(path)) {
+          openWorkspacePreview(path, conversationId);
+          return;
+        }
+        openWorkspaceFile(path, conversationId, { reveal });
       }}
     >
       {children}
@@ -121,7 +146,11 @@ export function ChatCode(props: CodeProps) {
 
   if (existingPath) {
     return (
-      <ChatMarkdownPathLink path={existingPath} className={className}>
+      <ChatMarkdownPathLink
+        path={existingPath.path}
+        range={existingPath.range}
+        className={className}
+      >
         {children}
       </ChatMarkdownPathLink>
     );
@@ -142,7 +171,7 @@ export function ChatStrong(props: StrongProps) {
 
   if (existingPath) {
     return (
-      <ChatMarkdownPathLink path={existingPath}>
+      <ChatMarkdownPathLink path={existingPath.path} range={existingPath.range}>
         {children}
       </ChatMarkdownPathLink>
     );

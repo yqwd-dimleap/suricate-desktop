@@ -4,11 +4,17 @@ import {
   useConversationStore,
 } from "#/stores/conversation-store";
 import { useFilesTabStore } from "#/stores/files-tab-store";
+import { usePreviewTabStore } from "#/stores/preview-tab-store";
 import type { CanvasUIAction } from "#/types/agent-server/core";
+import type { FileRevealRange } from "#/utils/file-reveal-range";
+import { parsePathWithReveal } from "#/utils/file-reveal-range";
 import { toFilesTabPath } from "#/utils/path-utils";
 
 const VALID_TABS: ReadonlySet<ConversationTab> = new Set<ConversationTab>([
   "files",
+  "preview",
+  "changes",
+  "commits",
   "browser",
   "terminal",
   "planner",
@@ -31,13 +37,22 @@ function isValidTab(value: string): value is ConversationTab {
   return VALID_TABS.has(value as ConversationTab);
 }
 
+function resolveWorkspacePath(rawPath: string): string | null {
+  const workingDir =
+    ConversationService.getCurrentConversation()?.workspace?.working_dir;
+  const parsed = parsePathWithReveal(rawPath);
+  return toFilesTabPath(parsed.path, workingDir);
+}
+
 /**
  * Chat path click → same as agent `navigate_to_file`.
  * Optional `conversationId` tags the selection so FilesTab accepts it.
+ * Optional `reveal` scrolls/flashes the target lines (Cursor-style).
  */
 export function openWorkspaceFile(
   path: string,
   conversationId?: string | null,
+  options?: { reveal?: FileRevealRange | null },
 ): void {
   const conversation = ConversationService.getCurrentConversation();
   handleCanvasUIAction(
@@ -47,25 +62,55 @@ export function openWorkspaceFile(
       path,
     } as CanvasUIAction,
     conversationId ?? conversation?.id ?? null,
+    options,
+  );
+}
+
+/**
+ * Open a workspace artifact in the Preview drawer tab (rich render).
+ */
+export function openWorkspacePreview(
+  path: string,
+  conversationId?: string | null,
+): void {
+  const conversation = ConversationService.getCurrentConversation();
+  handleCanvasUIAction(
+    {
+      kind: "CanvasUIAction",
+      command: "show_preview",
+      path,
+    } as CanvasUIAction,
+    conversationId ?? conversation?.id ?? null,
   );
 }
 
 export function handleCanvasUIAction(
   action: CanvasUIAction,
   conversationId: string | null = null,
+  options?: { reveal?: FileRevealRange | null },
 ): void {
   switch (action.command) {
-    case "navigate_to_file":
-    case "show_preview": {
+    case "navigate_to_file": {
       navigateToTab("files");
       if (!action.path) return;
 
-      const workingDir =
-        ConversationService.getCurrentConversation()?.workspace?.working_dir;
-      const path = toFilesTabPath(action.path, workingDir);
+      const parsed = parsePathWithReveal(action.path);
+      const path = resolveWorkspacePath(action.path);
       if (!path) return;
 
-      useFilesTabStore.getState().setSelectedPath(path, conversationId);
+      useFilesTabStore.getState().setSelectedPath(path, conversationId, {
+        reveal: options?.reveal ?? parsed.reveal ?? null,
+      });
+      return;
+    }
+    case "show_preview": {
+      navigateToTab("preview");
+      if (!action.path) return;
+
+      const path = resolveWorkspacePath(action.path);
+      if (!path) return;
+
+      usePreviewTabStore.getState().setPreviewPath(path, conversationId);
       return;
     }
     case "open_tab":

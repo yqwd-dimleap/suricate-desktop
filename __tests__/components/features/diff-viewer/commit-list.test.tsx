@@ -32,10 +32,15 @@ vi.mock("#/hooks/query/use-commit-changes", () => ({
 vi.mock("#/components/features/diff-viewer/diff-change-list", () => ({
   DiffChangeList: ({
     changes,
+    autoExpandPath,
   }: {
     changes: Array<{ path: string; status: string }>;
+    autoExpandPath?: string | null;
   }) => (
-    <div data-testid="diff-change-list">
+    <div
+      data-testid="diff-change-list"
+      data-auto-expand-path={autoExpandPath ?? ""}
+    >
       {changes.map((change) => (
         <div key={change.path}>{change.path}</div>
       ))}
@@ -159,6 +164,28 @@ describe("CommitList", () => {
     ).toHaveAttribute("aria-expanded", "true");
     expect(screen.getByText("src/a.ts")).toBeInTheDocument();
     expect(onAutoExpandHandled).toHaveBeenCalled();
+  });
+
+  it("forwards autoExpandPath into the Uncommitted file list", () => {
+    const onAutoExpandPathHandled = vi.fn();
+
+    render(
+      <CommitList
+        commits={[makeCommit()]}
+        hasMore={false}
+        uncommittedChanges={[{ path: "src/a.ts", status: "M" }]}
+        autoExpandPath="src/a.ts"
+        onAutoExpandPathHandled={onAutoExpandPathHandled}
+      />,
+    );
+
+    expect(
+      screen.getByTestId("uncommitted-changes-row-toggle"),
+    ).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByTestId("diff-change-list")).toHaveAttribute(
+      "data-auto-expand-path",
+      "src/a.ts",
+    );
   });
 
   it("still renders Uncommitted when there are no working-tree changes", () => {
