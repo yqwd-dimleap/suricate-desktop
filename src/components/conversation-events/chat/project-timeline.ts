@@ -4,6 +4,7 @@ import {
   isObservationEvent,
 } from "#/types/agent-server/type-guards";
 import { groupEvents, RenderedItem } from "./group-events";
+import { isAutoApprovablePendingAction } from "#/utils/requires-user-confirmation";
 
 /**
  * A rendered row of the conversation timeline. Extends the grouped event
@@ -105,6 +106,11 @@ export const projectTimeline = ({
     return base;
   }
   if (awaiting.id !== undefined && submittedEventIds.includes(awaiting.id)) {
+    return base;
+  }
+  // Safe actions (reads, browser, MCP, …) are auto-approved elsewhere; skip
+  // the confirmation card so it never flashes while the accept is in flight.
+  if (isAutoApprovablePendingAction(awaiting)) {
     return base;
   }
 

@@ -78,6 +78,7 @@ const DEFAULT_CONVERSATION_STATE: ConversationState = {
 const VALID_CONVERSATION_TABS: ReadonlySet<ConversationTab> = new Set([
   "files",
   "preview",
+  "changes",
   "commits",
   "browser",
   "terminal",
@@ -112,21 +113,15 @@ function sanitizeStoredState(
   if (
     result.selectedTab != null &&
     (REMOVED_CONVERSATION_TABS.has(result.selectedTab) ||
-      (result.selectedTab as string) === "changes" ||
       !VALID_CONVERSATION_TABS.has(result.selectedTab as ConversationTab))
   ) {
-    const selectedTab = result.selectedTab as string;
     result = { ...result };
-    if (selectedTab === "changes") {
-      result.selectedTab = "commits";
-    } else {
-      delete result.selectedTab;
-    }
+    delete result.selectedTab;
   }
 
   if (result.unpinnedTabs) {
     const filtered = result.unpinnedTabs.filter(
-      (tab) => tab !== "changes" && !REMOVED_CONVERSATION_TABS.has(tab),
+      (tab) => !REMOVED_CONVERSATION_TABS.has(tab),
     );
     if (filtered.length !== result.unpinnedTabs.length) {
       result = { ...result, unpinnedTabs: filtered };

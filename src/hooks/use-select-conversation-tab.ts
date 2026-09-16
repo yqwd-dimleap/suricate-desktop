@@ -72,8 +72,8 @@ export function useSelectConversationTab() {
   };
 
   /**
-   * Open the Commits drawer on Uncommitted. Optional `path` expands that
-   * file's working-tree diff after normalizing to a Files-tab relative path.
+   * Open the Changes tab (git changed-file tree + diff). Optional `path`
+   * selects that file after normalizing to a Files-tab relative path.
    */
   const navigateToChanges = (path?: string | null) => {
     setCommitsAutoExpandSection("uncommitted");
@@ -85,7 +85,7 @@ export function useSelectConversationTab() {
     } else {
       setCommitsAutoExpandPath(null);
     }
-    navigateToTab("commits");
+    navigateToTab("changes");
   };
 
   const navigateToCommits = () => {

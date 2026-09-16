@@ -90,7 +90,18 @@ describe("ConversationConfirmationCard", () => {
     expect(screen.queryByText("COMMON$HIGH_RISK")).not.toBeInTheDocument();
   });
 
-  it("records the event id only after the request succeeds", async () => {
+  it("shows the pending action without requiring an expand click", () => {
+    renderCard();
+
+    expect(
+      screen.getByTestId("conversation-confirmation-action"),
+    ).toHaveTextContent("Remove the build directory");
+    expect(
+      screen.getByTestId("conversation-confirmation-action-details"),
+    ).toBeInTheDocument();
+  });
+
+  it("hides immediately on confirm and keeps the id after success", async () => {
     let resolveRequest!: (value: unknown) => void;
     respondToConfirmationMock.mockImplementation(
       () =>
@@ -108,10 +119,10 @@ describe("ConversationConfirmationCard", () => {
       { accept: true },
       null,
     );
-    // In flight: not yet recorded, both actions locked.
-    expect(useEventMessageStore.getState().submittedEventIds).toEqual([]);
-    expect(screen.getByTestId("action-confirm-button")).toBeDisabled();
-    expect(screen.getByTestId("action-reject-button")).toBeDisabled();
+    // Optimistic hide: recorded before the server answers.
+    expect(useEventMessageStore.getState().submittedEventIds).toEqual([
+      "action-1",
+    ]);
 
     resolveRequest({});
     await waitFor(() =>
@@ -127,12 +138,14 @@ describe("ConversationConfirmationCard", () => {
     renderCard();
     const confirm = screen.getByTestId("action-confirm-button");
     await userEvent.click(confirm);
+    // Card is optimistically hidden from the timeline via submittedEventIds;
+    // a second click on the still-mounted node must not re-fire.
     await userEvent.click(confirm, { pointerEventsCheck: 0 });
 
     expect(respondToConfirmationMock).toHaveBeenCalledTimes(1);
   });
 
-  it("stays interactive and reports the error when the request fails", async () => {
+  it("restores the card and reports the error when the request fails", async () => {
     respondToConfirmationMock.mockRejectedValue(new Error("network down"));
 
     renderCard();
@@ -141,8 +154,10 @@ describe("ConversationConfirmationCard", () => {
     await waitFor(() =>
       expect(displayErrorToastMock).toHaveBeenCalledWith("network down"),
     );
-    // Failure keeps the card actionable: nothing recorded, buttons unlocked.
-    expect(useEventMessageStore.getState().submittedEventIds).toEqual([]);
+    // Failure rolls back the optimistic hide so the strip can reappear.
+    await waitFor(() =>
+      expect(useEventMessageStore.getState().submittedEventIds).toEqual([]),
+    );
     await waitFor(() =>
       expect(screen.getByTestId("action-confirm-button")).toBeEnabled(),
     );
@@ -154,6 +169,19 @@ describe("ConversationConfirmationCard", () => {
         "action-1",
       ]),
     );
+  });
+
+  it("ignores clicks outside the card so accidental dismiss cannot reject", async () => {
+    respondToConfirmationMock.mockResolvedValue({});
+
+    renderCard();
+    await userEvent.pointer({
+      keys: "[MouseLeft]",
+      target: document.body,
+    });
+
+    expect(respondToConfirmationMock).not.toHaveBeenCalled();
+    expect(useEventMessageStore.getState().submittedEventIds).toEqual([]);
   });
 
   it("submits via keyboard shortcuts", async () => {

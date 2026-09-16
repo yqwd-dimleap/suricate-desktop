@@ -31,6 +31,11 @@ interface EventGroupProps {
    * the right.
    */
   isFinalized?: boolean;
+  /**
+   * Open the grouped tool cards on first render. Used when this group holds
+   * the action awaiting confirmation so the user does not have to expand it.
+   */
+  defaultExpanded?: boolean;
   /** The fully-rendered event messages to show when the group is expanded. */
   children: React.ReactNode;
 }
@@ -60,10 +65,17 @@ export function EventGroup({
   events,
   allEvents,
   isFinalized = false,
+  defaultExpanded = false,
   children,
 }: EventGroupProps) {
   const { t } = useTranslation("openhands");
-  const [expanded, setExpanded] = React.useState(false);
+  const [expanded, setExpanded] = React.useState(defaultExpanded);
+
+  React.useEffect(() => {
+    if (defaultExpanded) {
+      setExpanded(true);
+    }
+  }, [defaultExpanded]);
   const contentId = React.useId();
   const buttonId = `${contentId}-toggle`;
 

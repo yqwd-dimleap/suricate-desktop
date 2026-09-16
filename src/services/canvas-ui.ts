@@ -13,6 +13,8 @@ import { toFilesTabPath } from "#/utils/path-utils";
 const VALID_TABS: ReadonlySet<ConversationTab> = new Set<ConversationTab>([
   "files",
   "preview",
+  "changes",
+  "commits",
   "browser",
   "terminal",
   "planner",

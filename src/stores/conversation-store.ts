@@ -8,6 +8,7 @@ import {
 export type ConversationTab =
   | "files"
   | "preview"
+  | "changes"
   | "commits"
   | "browser"
   | "terminal"
@@ -31,8 +32,9 @@ interface ConversationState {
   selectedTab: ConversationTab | null;
   commitsAutoExpandSection: CommitsPaneSection | null;
   /**
-   * One-shot path to expand inside the Uncommitted accordion after
-   * `navigateToChanges(path)`. Cleared once DiffChangeList applies it.
+   * One-shot path to select in the Changes tab after `navigateToChanges(path)`.
+   * Also expands the matching Uncommitted row when the Commits tab is open.
+   * Cleared once the Changes / DiffChangeList consumer applies it.
    */
   commitsAutoExpandPath: string | null;
   images: File[];
