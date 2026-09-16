@@ -16,6 +16,7 @@ import {
   ListTodo,
   SquareChevronRight,
   Frame,
+  GitCommitHorizontal,
 } from "lucide-react";
 import { LuFileDiff } from "react-icons/lu";
 import DocumentIcon from "#/icons/document.svg?react";
@@ -103,8 +104,13 @@ export function ConversationTabsContextMenu({
     { tab: "files", icon: DocumentIcon, i18nKey: I18nKey.COMMON$FILES },
     { tab: "preview", icon: Frame, i18nKey: I18nKey.COMMON$PREVIEW },
     {
-      tab: "commits",
+      tab: "changes",
       icon: LuFileDiff,
+      i18nKey: I18nKey.COMMON$CHANGES,
+    },
+    {
+      tab: "commits",
+      icon: GitCommitHorizontal,
       i18nKey: I18nKey.DIFF_VIEWER$COMMITS,
     },
     {

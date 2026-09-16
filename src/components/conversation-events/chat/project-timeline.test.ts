@@ -189,6 +189,68 @@ describe("projectTimeline", () => {
     expect(items[1]).toMatchObject({ event: { id: "action-1" } });
   });
 
+  it("emits no confirmation for safe non-write tools", () => {
+    const pending = {
+      id: "browser-1",
+      timestamp,
+      source: "agent" as const,
+      thought: [],
+      thinking_blocks: [],
+      action: {
+        kind: "BrowserGetStateAction" as const,
+        include_screenshot: false,
+      },
+      tool_name: "browser",
+      tool_call_id: "tool-browser-1",
+      tool_call: {
+        id: "tool-browser-1",
+        type: "function" as const,
+        function: { name: "browser", arguments: "{}" },
+      },
+      llm_response_id: "response-browser-1",
+      security_risk: SecurityRisk.LOW,
+    };
+    const events = [message("user-1", "user", "check the page"), pending];
+
+    const items = project(events, { awaitingConfirmation: true });
+
+    expect(kindsOf(items)).toEqual(["single", "single"]);
+  });
+
+  it("emits no confirmation for an auto-approvable file_editor view", () => {
+    const pending = {
+      id: "view-1",
+      timestamp,
+      source: "agent" as const,
+      thought: [],
+      thinking_blocks: [],
+      action: {
+        kind: "FileEditorAction" as const,
+        command: "view" as const,
+        path: "/workspace/app.ts",
+        file_text: null,
+        old_str: null,
+        new_str: null,
+        insert_line: null,
+        view_range: null,
+      },
+      tool_name: "file_editor",
+      tool_call_id: "tool-view-1",
+      tool_call: {
+        id: "tool-view-1",
+        type: "function" as const,
+        function: { name: "file_editor", arguments: "{}" },
+      },
+      llm_response_id: "response-view-1",
+      security_risk: SecurityRisk.LOW,
+    };
+    const events = [message("user-1", "user", "read the file"), pending];
+
+    const items = project(events, { awaitingConfirmation: true });
+
+    expect(kindsOf(items)).toEqual(["single", "single"]);
+  });
+
   it("emits no confirmation once the response was submitted", () => {
     const pending = bashAction("action-1", "rm -rf build");
     const events = [message("user-1", "user", "clean up"), pending];

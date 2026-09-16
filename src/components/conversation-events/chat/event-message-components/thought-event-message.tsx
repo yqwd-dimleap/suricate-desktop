@@ -1,40 +1,22 @@
 import React from "react";
 import { ActionEvent } from "#/types/agent-server/core";
-import { ChatMessage } from "../../../features/chat/chat-message";
+import { getActionThoughtText } from "../event-thought-helpers";
+import { CollapsibleThinking } from "./collapsible-thinking";
 
 interface ThoughtEventMessageProps {
   event: ActionEvent;
-  actions?: Array<{
-    icon: React.ReactNode;
-    onClick: () => void;
-    tooltip?: string;
-  }>;
-  isFromPlanningAgent?: boolean;
 }
 
-export function ThoughtEventMessage({
-  event,
-  actions,
-  isFromPlanningAgent = false,
-}: ThoughtEventMessageProps) {
-  // Extract thought content from the action event
-  const thoughtContent = event.thought
-    .filter((t) => t.type === "text")
-    .map((t) => t.text)
-    .join("\n");
+/**
+ * Renders an `ActionEvent`'s agent thought as a Cursor-style collapsible
+ * "Thought briefly" / "Thought Ns" header (same chrome as extended reasoning).
+ */
+export function ThoughtEventMessage({ event }: ThoughtEventMessageProps) {
+  const thoughtContent = getActionThoughtText(event);
 
-  // If there's no thought content, don't render anything
   if (!thoughtContent) {
     return null;
   }
 
-  return (
-    <ChatMessage
-      type="agent"
-      message={thoughtContent}
-      actions={actions}
-      isFromPlanningAgent={isFromPlanningAgent}
-      timestamp={event.timestamp}
-    />
-  );
+  return <CollapsibleThinking content={thoughtContent} />;
 }

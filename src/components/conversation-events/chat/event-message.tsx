@@ -304,12 +304,7 @@ export function EventMessage({
     return (
       <>
         {reasoningContent && <CollapsibleThinking content={reasoningContent} />}
-        {!suppressThought && (
-          <ThoughtEventMessage
-            event={event}
-            isFromPlanningAgent={isFromPlanningAgent}
-          />
-        )}
+        {!suppressThought && <ThoughtEventMessage event={event} />}
         <GenericEventMessageWrapper
           event={event}
           isLastMessage={isLastMessage}
@@ -362,10 +357,7 @@ export function EventMessage({
       <>
         {reasoningContent && <CollapsibleThinking content={reasoningContent} />}
         {shouldShowThought && (
-          <ThoughtEventMessage
-            event={correspondingAction}
-            isFromPlanningAgent={isFromPlanningAgent}
-          />
+          <ThoughtEventMessage event={correspondingAction} />
         )}
         <GenericEventMessageWrapper
           event={event}

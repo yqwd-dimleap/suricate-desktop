@@ -6,6 +6,7 @@ import { I18nKey } from "#/i18n/declaration";
 import { useThinkingElapsedSeconds } from "#/hooks/use-thinking-elapsed-seconds";
 import { TextShimmer } from "../../../shared/text-shimmer";
 import { MarkdownRenderer } from "../../../features/markdown/markdown-renderer";
+import { getSettledThinkingLabel } from "./settled-thinking-label";
 
 interface CollapsibleThinkingProps {
   /** The thinking / reasoning content to display when expanded. */
@@ -13,15 +14,17 @@ interface CollapsibleThinkingProps {
   /**
    * True while the agent is still producing this reasoning. The label shows
    * an animated shimmer while in progress; once the thought lands the
-   * animation stops and the label flips from "Thinking" to "Thought".
+   * animation stops and the label flips from "Thinking" to a Cursor-style
+   * settled phrase ("Thought briefly" / "Thought Ns" / plain "Thought").
    */
   isThinking?: boolean;
 }
 
 /**
  * Cursor-style thinking header: compact chevron + shimmering "Thinking" +
- * muted elapsed seconds while live; settles to a static "Thought" + duration.
- * Collapsed by default so the chat stays compact.
+ * muted elapsed seconds while live; settles to "Thought briefly",
+ * "Thought Ns", or plain "Thought". Collapsed by default so the chat stays
+ * compact.
  */
 export function CollapsibleThinking({
   content,
@@ -39,10 +42,10 @@ export function CollapsibleThinking({
   }
 
   const Chevron = expanded ? ArrowUp : ArrowDown;
-  const elapsedLabel =
-    elapsedSeconds == null
-      ? null
-      : t(I18nKey.THINKING$ELAPSED, { seconds: elapsedSeconds });
+  const settledLabel = isThinking
+    ? null
+    : getSettledThinkingLabel(elapsedSeconds);
+  const showLiveElapsed = isThinking && elapsedSeconds != null;
 
   return (
     <div
@@ -71,25 +74,37 @@ export function CollapsibleThinking({
             as="span"
             data-testid="collapsible-thinking-label"
             className="text-sm font-normal"
-            duration={2}
-            spread={3}
-            base="var(--oh-muted)"
-            highlight="var(--oh-foreground)"
           >
             {t(I18nKey.THINKING$TITLE)}
           </TextShimmer>
         ) : (
-          <span className="text-sm font-normal text-[var(--oh-muted)]">
-            {t(I18nKey.OBSERVATION_MESSAGE$THINK)}
-          </span>
+          settledLabel && (
+            <span
+              className="text-sm font-normal text-[var(--oh-muted)]"
+              data-testid="collapsible-thinking-label"
+              data-seconds={
+                settledLabel.key === "THINKING$SETTLED_DURATION"
+                  ? settledLabel.seconds
+                  : undefined
+              }
+            >
+              {settledLabel.key === "THINKING$SETTLED_DURATION"
+                ? t(I18nKey.THINKING$SETTLED_DURATION, {
+                    seconds: settledLabel.seconds,
+                  })
+                : settledLabel.key === "THINKING$SETTLED_BRIEF"
+                  ? t(I18nKey.THINKING$SETTLED_BRIEF)
+                  : t(I18nKey.OBSERVATION_MESSAGE$THINK)}
+            </span>
+          )
         )}
-        {elapsedLabel != null && (
+        {showLiveElapsed && (
           <span
             className="text-sm font-normal text-[var(--oh-muted)]"
             data-testid="collapsible-thinking-elapsed"
             data-seconds={elapsedSeconds ?? undefined}
           >
-            {elapsedLabel}
+            {t(I18nKey.THINKING$ELAPSED, { seconds: elapsedSeconds })}
           </span>
         )}
       </button>

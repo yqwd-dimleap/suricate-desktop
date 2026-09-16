@@ -1,4 +1,4 @@
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
 import { ActionTooltip } from "../action-tooltip";
@@ -11,6 +11,8 @@ import { useRespondToConfirmation } from "#/hooks/mutation/use-respond-to-confir
 import { SecurityRisk } from "#/types/agent-server/core/base/common";
 import { OpenHandsEvent } from "#/types/agent-server/core";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
+import { getEventContent } from "#/components/conversation-events/chat/event-content-helpers/get-event-content";
+import { MarkdownRenderer } from "#/components/features/markdown/markdown-renderer";
 
 interface ConversationConfirmationCardProps {
   /** The pending action this card asks the user to approve or reject.
@@ -22,10 +24,11 @@ interface ConversationConfirmationCardProps {
 /**
  * Inline confirmation card anchored under the tool row awaiting approval.
  *
- * Submission life-cycle: both actions (and their keyboard shortcuts) lock
- * while a response is in flight; the event id is recorded as submitted only
- * on success, so a failed request leaves the card interactive instead of
- * hiding it prematurely.
+ * Dismisses immediately on confirm / reject via the buttons or shortcuts
+ * (optimistic hide via `submittedEventIds`). Clicks outside the card do
+ * nothing — accidental blank clicks must not approve or reject. A failed
+ * request rolls the id back so the card can reappear; successful responses
+ * leave it hidden.
  */
 export function ConversationConfirmationCard({
   event,
@@ -33,6 +36,12 @@ export function ConversationConfirmationCard({
   const addSubmittedEventId = useEventMessageStore(
     (state) => state.addSubmittedEventId,
   );
+  const removeSubmittedEventId = useEventMessageStore(
+    (state) => state.removeSubmittedEventId,
+  );
+  // Synchronous guard so double-clicks in the same tick cannot submit twice
+  // before React Query flips `isPending`.
+  const hasSubmittedRef = useRef(false);
 
   const { t } = useTranslation("openhands");
   const { data: conversation } = useActiveConversation();
@@ -41,8 +50,16 @@ export function ConversationConfirmationCard({
 
   const handleConfirmation = useCallback(
     (accept: boolean) => {
-      if (isPending || !conversation) {
+      if (hasSubmittedRef.current || isPending || !conversation) {
         return;
+      }
+
+      hasSubmittedRef.current = true;
+
+      // Hide the strip immediately so accept / reject feel instant; roll
+      // back if the server rejects the response.
+      if (event.id !== undefined) {
+        addSubmittedEventId(event.id);
       }
 
       respondToConfirmation(
@@ -53,12 +70,11 @@ export function ConversationConfirmationCard({
           accept,
         },
         {
-          onSuccess: () => {
-            if (event.id) {
-              addSubmittedEventId(event.id);
-            }
-          },
           onError: (error) => {
+            hasSubmittedRef.current = false;
+            if (event.id !== undefined) {
+              removeSubmittedEventId(event.id);
+            }
             displayErrorToast(
               error instanceof Error ? error.message : t(I18nKey.ERROR$GENERIC),
             );
@@ -72,6 +88,7 @@ export function ConversationConfirmationCard({
       respondToConfirmation,
       event.id,
       addSubmittedEventId,
+      removeSubmittedEventId,
       t,
     ],
   );
@@ -102,6 +119,7 @@ export function ConversationConfirmationCard({
     ? event.security_risk
     : SecurityRisk.UNKNOWN;
   const isHighRisk = risk === SecurityRisk.HIGH;
+  const { title, details } = getEventContent(event);
 
   return (
     <div
@@ -116,7 +134,30 @@ export function ConversationConfirmationCard({
           title={t(I18nKey.COMMON$HIGH_RISK)}
         />
       )}
-      <div className="flex justify-between items-center">
+      <div
+        data-testid="conversation-confirmation-action"
+        className="rounded-lg border border-[var(--oh-border)] bg-[var(--oh-surface)] px-3 py-2 text-sm text-[var(--oh-foreground)]"
+      >
+        <div
+          data-testid="conversation-confirmation-action-title"
+          className="font-normal text-[var(--oh-foreground)]"
+        >
+          {title}
+        </div>
+        {details ? (
+          <div
+            className="mt-2 text-[var(--oh-muted)]"
+            data-testid="conversation-confirmation-action-details"
+          >
+            {typeof details === "string" ? (
+              <MarkdownRenderer>{details}</MarkdownRenderer>
+            ) : (
+              details
+            )}
+          </div>
+        ) : null}
+      </div>
+      <div className="flex items-center justify-between">
         <p className="text-sm font-normal text-white">
           {t(I18nKey.CHAT_INTERFACE$USER_ASK_CONFIRMATION)}
         </p>

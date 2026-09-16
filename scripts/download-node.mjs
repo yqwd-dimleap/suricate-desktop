@@ -29,6 +29,7 @@
  * Usage:
  *   node scripts/download-node.mjs           # uses NODE_BUNDLE_VERSION below
  *   NODE_VERSION=22.10.0 node scripts/download-node.mjs
+ *   FORCE_NODE_DOWNLOAD=1 node scripts/download-node.mjs  # re-download even if present
  *
  * Output (per platform):
  *   POSIX:   resources/node/bin/{node,npm,npx} + resources/node/lib/node_modules/npm/...
@@ -342,6 +343,22 @@ function dirSizeBytes(dir) {
 async function main() {
   const version = resolveVersion();
   const spec = getPlatformSpec(version);
+  const force = process.env.FORCE_NODE_DOWNLOAD === "1";
+
+  // Skip when a usable Node tree is already present (offline / flaky network
+  // builds). FORCE_NODE_DOWNLOAD=1 forces a fresh download.
+  if (!force) {
+    try {
+      verifyLayout();
+      console.log(
+        `[download-node] Using existing Node at ${outDir} (set FORCE_NODE_DOWNLOAD=1 to re-download).`,
+      );
+      return;
+    } catch {
+      // Missing or incomplete — fall through to download.
+    }
+  }
+
   const archiveName = `${spec.name}.${spec.ext}`;
   const url = `https://nodejs.org/dist/v${version}/${archiveName}`;
   const tmpFile = join(tmpdir(), `node-download-${Date.now()}.${spec.ext}`);

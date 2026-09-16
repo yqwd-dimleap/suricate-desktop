@@ -10,7 +10,7 @@ import {
 import { useFilesTabStore } from "#/stores/files-tab-store";
 import { MarkdownRenderer } from "#/components/features/markdown/markdown-renderer";
 import { isMarkdownFilePath } from "#/utils/is-markdown-file-path";
-import { HighlightedSourceView } from "./highlighted-source-view";
+import { EditableSourceView } from "./editable-source-view";
 import type { ViewMode } from "./view-mode";
 
 interface FileContentViewerProps {
@@ -122,12 +122,7 @@ export function FileContentViewer({ path, viewMode }: FileContentViewerProps) {
   if (viewMode === "plain") {
     if (kind === "text" && text !== null) {
       return (
-        <HighlightedSourceView
-          path={path}
-          text={text}
-          mimeType={mimeType ?? undefined}
-          reveal={revealForPath}
-        />
+        <EditableSourceView path={path} text={text} reveal={revealForPath} />
       );
     }
     return <UnpreviewableFallback path={path} />;
@@ -221,19 +216,11 @@ export function FileContentViewer({ path, viewMode }: FileContentViewerProps) {
   }
 
   // Rich mode for actual source code (.ts, .py, .yaml, .css, …): there
-  // is no other "rich" rendering to fall back to, so highlighted source
-  // IS the rich view. Identical to the plain-mode treatment — keeping
-  // both branches reuse `HighlightedSourceView` means the toggle has the
-  // same visual identity for source files in both modes (which is the
-  // honest answer: source IS rendered code).
+  // is no other "rich" rendering to fall back to, so the editable source
+  // view IS the rich view (same as plain mode for source files).
   if (kind === "text" && text !== null) {
     return (
-      <HighlightedSourceView
-        path={path}
-        text={text}
-        mimeType={mimeType ?? undefined}
-        reveal={revealForPath}
-      />
+      <EditableSourceView path={path} text={text} reveal={revealForPath} />
     );
   }
 

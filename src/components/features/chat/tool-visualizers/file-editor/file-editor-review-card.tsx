@@ -4,10 +4,12 @@ import type { GitChangeStatus } from "#/api/open-hands.types";
 import { ConfirmationModal } from "#/components/shared/modals/confirmation-modal";
 import { useOptionalConversationId } from "#/hooks/use-conversation-id";
 import { useRevertGitFileChange } from "#/hooks/mutation/use-revert-git-file-change";
+import { useAgentReviewActions } from "#/hooks/mutation/use-agent-review-actions";
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
 import { I18nKey } from "#/i18n/declaration";
 import { openWorkspaceFile } from "#/services/canvas-ui";
 import { useFilesTabStore } from "#/stores/files-tab-store";
+import { useAgentReviewStore } from "#/stores/agent-review-store";
 import { getLanguageFromPath } from "#/utils/get-language-from-path";
 import { toFilesTabPath } from "#/utils/path-utils";
 import {
@@ -47,6 +49,7 @@ export function FileEditorReviewCard({
   const { conversationId } = useOptionalConversationId();
   const { data: conversation } = useActiveConversation();
   const revertMutation = useRevertGitFileChange();
+  const reviewActions = useAgentReviewActions();
   const clearStickyReveal = useFilesTabStore(
     (state) => state.clearStickyReveal,
   );
@@ -61,10 +64,15 @@ export function FileEditorReviewCard({
   const gitPath = toFilesTabPath(path, workingDir) || path;
   const status: GitChangeStatus = prevExist ? "M" : "U";
 
-  const dismissHighlight = React.useCallback(() => {
+  const markReviewed = React.useCallback(() => {
     clearStickyReveal(gitPath);
     setKept(true);
   }, [clearStickyReveal, gitPath]);
+
+  const keepChanges = React.useCallback(() => {
+    reviewActions.acceptAllInFile(gitPath);
+    markReviewed();
+  }, [gitPath, markReviewed, reviewActions]);
 
   const openFile = () => {
     if (conversationId) {
@@ -112,7 +120,7 @@ export function FileEditorReviewCard({
                 type="button"
                 data-testid="file-editor-keep-button"
                 className="rounded px-2 py-0.5 text-xs text-[var(--oh-text-secondary)] hover:bg-[var(--oh-interactive-hover)] hover:text-[var(--oh-foreground)]"
-                onClick={dismissHighlight}
+                onClick={keepChanges}
               >
                 {t(I18nKey.DIFF_VIEWER$KEEP)}
               </button>
@@ -147,7 +155,12 @@ export function FileEditorReviewCard({
               {
                 onSuccess: () => {
                   setIsRevertConfirmOpen(false);
-                  dismissHighlight();
+                  if (conversationId) {
+                    useAgentReviewStore
+                      .getState()
+                      .clearFile(conversationId, gitPath);
+                  }
+                  markReviewed();
                 },
               },
             );

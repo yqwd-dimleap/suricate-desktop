@@ -9,6 +9,7 @@
  * Usage:
  *   node scripts/download-uv.mjs          # uses latest GitHub release
  *   UV_VERSION=0.7.0 node scripts/download-uv.mjs
+ *   FORCE_UV_DOWNLOAD=1 node scripts/download-uv.mjs  # re-download even if present
  *
  * Output (per platform):
  *   resources/bin/uv    + resources/bin/uvx     (macOS / Linux)
@@ -153,6 +154,19 @@ function extract(archivePath, targetDir, ext) {
 
 async function main() {
   const spec = getPlatformSpec();
+  const existing = spec.binaries.map((bin) => join(outDir, bin));
+  const force = process.env.FORCE_UV_DOWNLOAD === "1";
+
+  if (!force && existing.every((path) => existsSync(path))) {
+    console.log(
+      `[download-uv] Using existing binaries in ${outDir} (set FORCE_UV_DOWNLOAD=1 to re-download).`,
+    );
+    for (const path of existing) {
+      console.log(`[download-uv] ✓ ${path}`);
+    }
+    return;
+  }
+
   const version = await resolveVersion();
 
   console.log(`[download-uv] Downloading uv v${version} for ${PLATFORM}/${ARCH}`);

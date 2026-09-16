@@ -71,7 +71,7 @@ describe("Messages confirmation prompt", () => {
     });
   });
 
-  it("keeps confirmation visible when the latest action is inside a collapsed event group", () => {
+  it("keeps confirmation visible and expands the group holding the pending action", () => {
     const events = [
       createBashActionEvent("action-1", "echo first"),
       createBashActionEvent("action-2", "echo second"),
@@ -89,8 +89,11 @@ describe("Messages confirmation prompt", () => {
     expect(screen.getByTestId("event-group")).toBeInTheDocument();
     expect(screen.getByTestId("event-group-toggle")).toHaveAttribute(
       "aria-expanded",
-      "false",
+      "true",
     );
+    expect(
+      screen.getByTestId("conversation-confirmation-action"),
+    ).toBeInTheDocument();
     expect(
       screen.getByText("CHAT_INTERFACE$USER_ASK_CONFIRMATION"),
     ).toBeInTheDocument();

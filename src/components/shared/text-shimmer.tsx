@@ -3,16 +3,15 @@ import { useReducedMotion } from "framer-motion";
 import { cn } from "#/utils/utils";
 
 /**
- * The gradient is an oversized repeating pattern; animating background-position
- * by exactly one period loops with no visible jump and no muted gap between
- * sweeps (the pattern is periodic, so a highlight is always near the text).
+ * Cursor-style text shimmer: a soft, narrow bright band sweeps L→R across
+ * muted glyphs. Gradient direction is near-horizontal (`90deg + angle`),
+ * with feathered mid-stops so the highlight reads as a light sweep rather
+ * than a hard stripe. Position stays in [0%, 100%] so letters never flash
+ * transparent on dark backgrounds.
+ *
+ * `spread` widens the bright mid-band (1–8). `duration` is seconds per pass.
+ * `angle` is tilt in degrees from a horizontal L→R sweep (Cursor ≈ 20).
  */
-const SHIMMER_BACKGROUND_SIZE = "200%";
-/** Gradient period as a percentage of the (oversized) background image. */
-const SHIMMER_PERIOD = 8;
-/** Shifting background-position by one period == 2 * period (image is 2x wide). */
-const SHIMMER_TRAVEL = SHIMMER_PERIOD * 2;
-
 export type TextShimmerProps = {
   children: string;
   as?: React.ElementType;
@@ -23,6 +22,8 @@ export type TextShimmerProps = {
   highlight?: string;
   /** CSS color of the base (non-swept) text (defaults to --oh-muted). */
   base?: string;
+  /** Tilt from horizontal L→R sweep in degrees; Cursor-like default is 20. */
+  angle?: number;
 } & Omit<React.HTMLAttributes<HTMLElement>, "children" | "className">;
 
 function TextShimmerComponent({
@@ -33,6 +34,7 @@ function TextShimmerComponent({
   spread = 2,
   highlight = "var(--oh-foreground)",
   base = "var(--oh-muted)",
+  angle = 20,
   style,
   ...rest
 }: TextShimmerProps) {
@@ -40,26 +42,36 @@ function TextShimmerComponent({
   const reactId = useId();
   const animationName = `oh-text-shimmer-${reactId.replace(/:/g, "")}`;
 
-  // Wider spread => wider bright band within each repeating period.
-  const bandHalfWidth = useMemo(
-    () => Math.min(SHIMMER_PERIOD / 2 - 1, 1 + spread / 2),
-    [spread],
-  );
+  // Half-width of the bright region on the gradient (%). spread 2 → ±9%
+  // core so one soft band is visible without washing the whole label.
+  const bandHalf = useMemo(() => {
+    const clamped = Math.min(8, Math.max(1, spread));
+    return 5 + clamped * 2;
+  }, [spread]);
 
   const shimmerStyle = useMemo(() => {
-    const center = SHIMMER_PERIOD / 2;
+    const lo = Math.max(0, 50 - bandHalf);
+    const hi = Math.min(100, 50 + bandHalf);
+    // Feathered mid-stops (Cursor / shadcn-style), not a hard base→white cut.
+    const loMid = Math.max(0, 50 - bandHalf * 0.5);
+    const hiMid = Math.min(100, 50 + bandHalf * 0.5);
+    const mid = `color-mix(in srgb, ${highlight} 55%, ${base})`;
+    // 90deg = horizontal L→R; `angle` adds Cursor’s slight tilt (~20°).
+    const direction = `${90 + angle}deg`;
     return {
       ...style,
-      backgroundImage: `repeating-linear-gradient(90deg, ${base} 0%, ${base} ${center - bandHalfWidth}%, ${highlight} ${center}%, ${base} ${center + bandHalfWidth}%, ${base} ${SHIMMER_PERIOD}%)`,
-      backgroundSize: `${SHIMMER_BACKGROUND_SIZE} 100%`,
+      backgroundImage: `linear-gradient(${direction}, ${base} 0%, ${base} ${lo}%, ${mid} ${loMid}%, ${highlight} 50%, ${mid} ${hiMid}%, ${base} ${hi}%, ${base} 100%)`,
+      // 200% wide + position in [0,100] ⇒ glyphs always painted.
+      backgroundSize: "200% 100%",
       backgroundRepeat: "no-repeat",
       WebkitBackgroundClip: "text",
       backgroundClip: "text",
-      color: "transparent",
+      // Fallback if clip fails; fill is cleared so the gradient shows.
+      color: base,
       WebkitTextFillColor: "transparent",
       animation: `${animationName} ${duration}s linear infinite`,
     } as React.CSSProperties;
-  }, [animationName, bandHalfWidth, duration, highlight, base, style]);
+  }, [animationName, angle, bandHalf, duration, highlight, base, style]);
 
   if (reduceMotion) {
     return (
@@ -77,7 +89,7 @@ function TextShimmerComponent({
     <>
       <style
         dangerouslySetInnerHTML={{
-          __html: `@keyframes ${animationName}{from{background-position:${SHIMMER_TRAVEL}% center}to{background-position:0% center}}`,
+          __html: `@keyframes ${animationName}{from{background-position:100% center}to{background-position:0% center}}`,
         }}
       />
       <Component

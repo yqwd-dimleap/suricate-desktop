@@ -132,6 +132,8 @@ export const Messages: React.FC<MessagesProps> = React.memo(
           const isFinalized = renderedItems
             .slice(itemIndex + 1)
             .some((later) => later.kind !== "confirmation");
+          const awaitingConfirmationHere =
+            renderedItems[itemIndex + 1]?.kind === "confirmation";
           const groupKey = item.events[0]?.id ?? `group-${item.startIndex}`;
           return (
             <React.Fragment key={`group-${groupKey}`}>
@@ -139,6 +141,7 @@ export const Messages: React.FC<MessagesProps> = React.memo(
                 events={item.events}
                 allEvents={allEvents}
                 isFinalized={isFinalized}
+                defaultExpanded={awaitingConfirmationHere}
               >
                 {item.events.map((event, offset) =>
                   renderEventMessage(event, item.startIndex + offset, true),
