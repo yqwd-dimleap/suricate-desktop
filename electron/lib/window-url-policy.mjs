@@ -53,3 +53,17 @@ export function isExternalBrowsableUrl(rawUrl) {
     return false;
   }
 }
+
+/**
+ * Origin the desktop BrowserWindow loads after the local stack is up.
+ * Ingress may bind the preferred port (8000) or an OS-assigned free port when
+ * that preferred port is busy — callers must pass the allocated port from
+ * `dev-with-automation` config, never a hardcoded default.
+ */
+export function buildDesktopAppOrigin(ingressPort) {
+  const port = Number(ingressPort);
+  if (!Number.isInteger(port) || port <= 0 || port > 65535) {
+    throw new Error(`Invalid ingress port: ${ingressPort}`);
+  }
+  return `http://localhost:${port}`;
+}

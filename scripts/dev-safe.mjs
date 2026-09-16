@@ -198,6 +198,14 @@ function isEnoentError(error) {
 }
 
 /**
+ * Hosts probed when checking whether a TCP port is free.
+ * Static-server binds `::` (dual-stack); ingress clients use `localhost`
+ * which often resolves to `::1` first. An IPv4-only probe therefore misses
+ * foreign frontends already listening on IPv6.
+ */
+const DEFAULT_PORT_PROBE_HOSTS = ["127.0.0.1", "::"];
+
+/**
  * Find a free port, preferring the specified port if available.
  *
  * Tries the preferred port first; if it's busy, falls back to letting
@@ -212,10 +220,13 @@ function isEnoentError(error) {
  * For Vite, `strictPort: true` ensures a fast failure if this occurs.
  *
  * @param {number} preferredPort - The port to try first
- * @param {string} host - The host to bind to (default: "127.0.0.1")
+ * @param {string|string[]} [host] - Host(s) to probe (default: IPv4 + IPv6)
  * @returns {Promise<number>} The actual port that was acquired
  */
-export async function findFreePort(preferredPort, host = "127.0.0.1") {
+export async function findFreePort(
+  preferredPort,
+  host = DEFAULT_PORT_PROBE_HOSTS,
+) {
   // If preferredPort is 0, skip the check and go straight to OS assignment
   if (preferredPort > 0) {
     const preferredAvailable = await tryPort(preferredPort, host);
@@ -224,11 +235,13 @@ export async function findFreePort(preferredPort, host = "127.0.0.1") {
     }
   }
 
-  // Fall back to OS-assigned port
+  // Fall back to OS-assigned port (bind IPv4; uniqueness across dual-stack
+  // is enforced by findFreePorts' usedPorts set + the preferred probe above).
+  const listenHost = Array.isArray(host) ? "127.0.0.1" : host;
   return new Promise((resolve, reject) => {
     const server = net.createServer();
     server.once("error", reject);
-    server.listen(0, host, () => {
+    server.listen(0, listenHost, () => {
       const { port } = server.address();
       server.close(() => resolve(port));
     });
@@ -238,18 +251,32 @@ export async function findFreePort(preferredPort, host = "127.0.0.1") {
 /**
  * Check if a port is available by attempting to bind to it.
  *
+ * Static-server / ingress bind on `::` (dual-stack). Checking only
+ * `127.0.0.1` can report "free" while another process already holds the
+ * IPv6/`*` listener — the desktop app then points ingress at that port and
+ * silently serves a foreign frontend (e.g. a leftover `agent-canvas` CLI).
+ * A port is free only when every probe host can bind.
+ *
  * @param {number} port - The port to check
- * @param {string} host - The host to bind to
- * @returns {Promise<boolean>} True if the port is available
+ * @param {string|string[]} [host] - Host(s) to probe (default: IPv4 + IPv6)
+ * @returns {Promise<boolean>} True if the port is available on all hosts
  */
-function tryPort(port, host = "127.0.0.1") {
-  return new Promise((resolve) => {
-    const server = net.createServer();
-    server.once("error", () => resolve(false));
-    server.listen(port, host, () => {
-      server.close(() => resolve(true));
-    });
-  });
+function tryPort(port, host = ["127.0.0.1", "::"]) {
+  const hosts = Array.isArray(host) ? host : [host];
+
+  return (async () => {
+    for (const h of hosts) {
+      const free = await new Promise((resolve) => {
+        const server = net.createServer();
+        server.once("error", () => resolve(false));
+        server.listen(port, h, () => {
+          server.close(() => resolve(true));
+        });
+      });
+      if (!free) return false;
+    }
+    return true;
+  })();
 }
 
 /**
@@ -293,7 +320,10 @@ export async function assertPortsFree(portConfigs, host = "127.0.0.1") {
  * @param {string} host - The host to bind to (default: "127.0.0.1")
  * @returns {Promise<Record<string, number>>} Map of name to actual port
  */
-export async function findFreePorts(portConfigs, host = "127.0.0.1") {
+export async function findFreePorts(
+  portConfigs,
+  host = DEFAULT_PORT_PROBE_HOSTS,
+) {
   const result = {};
   const usedPorts = new Set();
 
@@ -602,14 +632,18 @@ export async function buildSafeDevConfigAsync(
     preferredBackendPort + 1,
   );
 
-  // Fail fast if any required port is already in use.
-  await assertPortsFree([
-    { name: "agent-server", port: preferredBackendPort },
-    { name: "vscode", port: preferredVscodePort },
+  // Prefer defaults when free; otherwise take OS-assigned free ports so a
+  // leftover agent-server does not block `npm run dev:minimal`.
+  const allocated = await findFreePorts([
+    { name: "agent-server", preferred: preferredBackendPort },
+    { name: "vscode", preferred: preferredVscodePort },
   ]);
 
   return buildConfigFromPorts(
-    { backendPort: preferredBackendPort, vscodePort: preferredVscodePort },
+    {
+      backendPort: allocated["agent-server"],
+      vscodePort: allocated.vscode,
+    },
     cwd,
     env,
   );

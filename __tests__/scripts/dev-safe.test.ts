@@ -90,6 +90,28 @@ describe("findFreePort", () => {
     expect(allocatedPort).toBeGreaterThan(0);
   });
 
+  it("treats a dual-stack (::) listener as occupying the port", async () => {
+    const busyPort = await new Promise<number>((resolve, reject) => {
+      const server = net.createServer();
+      server.listen(0, "::", () => {
+        const addr = server.address();
+        if (addr && typeof addr === "object") {
+          servers.push(server);
+          resolve(addr.port);
+        } else {
+          server.close();
+          reject(new Error("Failed to get server address"));
+        }
+      });
+      server.on("error", reject);
+    });
+
+    // Preferred IPv4-only probe used to miss :: listeners; allocation must
+    // fall back so ingress never points at a foreign dual-stack frontend.
+    const allocated = await findFreePort(busyPort);
+    expect(allocated).not.toBe(busyPort);
+  });
+
   it("returns OS-assigned port when preferredPort is 0", async () => {
     const port = await findFreePort(0, "127.0.0.1");
     expect(typeof port).toBe("number");
@@ -196,7 +218,7 @@ describe("buildSafeDevConfigAsync", () => {
   }
 
   it("returns config with dynamically allocated ports", async () => {
-    // Use a high port so the assertPortsFree check passes even when a real
+    // Use a high preferred port so the happy path sticks even when a real
     // dev stack is running on the default port (18000).
     const config = await buildSafeDevConfigAsync(repoRoot, {
       OH_CANVAS_SAFE_BACKEND_PORT: "19800",
@@ -211,7 +233,7 @@ describe("buildSafeDevConfigAsync", () => {
     expect(config.backendPort).not.toBe(config.vscodePort);
   });
 
-  it("throws when preferred port is busy", async () => {
+  it("falls back when preferred port is busy", async () => {
     // Block a specific high port we'll request
     const busyPort = 19600;
     const server = net.createServer();
@@ -223,13 +245,14 @@ describe("buildSafeDevConfigAsync", () => {
       server.on("error", reject);
     });
 
-    // Request the busy port via env var — should throw instead of falling back
-    await expect(
-      buildSafeDevConfigAsync(repoRoot, {
-        OH_CANVAS_SAFE_BACKEND_PORT: busyPort.toString(),
-        OH_SESSION_API_KEY_PATH: tempKeyPath(),
-      }),
-    ).rejects.toThrow(/agent-server.*port 19600/i);
+    const config = await buildSafeDevConfigAsync(repoRoot, {
+      OH_CANVAS_SAFE_BACKEND_PORT: busyPort.toString(),
+      OH_SESSION_API_KEY_PATH: tempKeyPath(),
+    });
+
+    expect(config.backendPort).not.toBe(busyPort);
+    expect(config.backendPort).toBeGreaterThan(0);
+    expect(config.vscodePort).not.toBe(config.backendPort);
   });
 });
 

@@ -239,7 +239,7 @@ describe("backend-registry storage", () => {
     });
   });
 
-  it("syncs a stale default Local API key across localhost and 127.0.0.1", () => {
+  it("syncs a stale default Local API key and host across localhost and 127.0.0.1", () => {
     vi.stubEnv("VITE_BACKEND_BASE_URL", "http://127.0.0.1:8000");
     vi.stubEnv("VITE_SESSION_API_KEY", "fresh-session-key");
     window.localStorage.setItem(
@@ -257,7 +257,32 @@ describe("backend-registry storage", () => {
 
     expect(readStoredBackends()[0]).toMatchObject({
       id: "default-local",
-      host: "http://localhost:8000",
+      host: "http://127.0.0.1:8000",
+      apiKey: "fresh-session-key",
+    });
+  });
+
+  it("syncs a stale default Local host when the launcher ingress port changes", () => {
+    vi.stubEnv("VITE_BACKEND_BASE_URL", "");
+    vi.stubEnv("VITE_SESSION_API_KEY", "fresh-session-key");
+    // Simulate a prior run that stored :8000 while this page is on a
+    // dynamically allocated ingress port (window.location.origin).
+    window.localStorage.setItem(
+      BACKENDS_STORAGE_KEY,
+      JSON.stringify([
+        {
+          id: "default-local",
+          name: "Local",
+          host: "http://localhost:8000",
+          apiKey: "fresh-session-key",
+          kind: "local",
+        },
+      ]),
+    );
+
+    expect(readStoredBackends()[0]).toMatchObject({
+      id: "default-local",
+      host: window.location.origin,
       apiKey: "fresh-session-key",
     });
   });
