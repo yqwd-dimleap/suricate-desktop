@@ -77,13 +77,28 @@ function syncLauncherDefaultLocalBackend(backends: Backend[]): Backend[] {
       return backend;
     }
 
-    if (backend.apiKey === defaultBackend.apiKey) return backend;
+    const next: Backend = { ...backend };
+    let changed = false;
+
+    // Session key rotation: launcher regenerates/persists a new key and
+    // injects it into the page; overwrite the stored default-local key.
+    if (backend.apiKey !== defaultBackend.apiKey) {
+      next.apiKey = defaultBackend.apiKey;
+      changed = true;
+    }
+
+    // Dynamic ingress ports: a prior run may have stored :8000 while this
+    // launch bound a different loopback port. Keep default-local pointed at
+    // the origin that actually served this page (or the baked base URL).
+    if (backend.host !== defaultBackend.host) {
+      next.host = defaultBackend.host;
+      changed = true;
+    }
+
+    if (!changed) return backend;
 
     didSync = true;
-    return {
-      ...backend,
-      apiKey: defaultBackend.apiKey,
-    };
+    return next;
   });
 
   if (!didSync) return backends;
