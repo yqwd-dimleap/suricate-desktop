@@ -25,6 +25,13 @@ vi.mock("#/hooks/query/use-unified-git-diff", () => ({
   }),
 }));
 
+vi.mock("#/hooks/mutation/use-revert-git-file-change", () => ({
+  useRevertGitFileChange: () => ({
+    mutate: vi.fn(),
+    isPending: false,
+  }),
+}));
+
 vi.mock("@monaco-editor/react", () => ({
   DiffEditor: (props: Record<string, unknown>) => (
     <div data-testid="file-diff-viewer" data-original={props.original} data-modified={props.modified} />
@@ -223,5 +230,28 @@ describe("FileDiffViewer", () => {
       "aria-pressed",
       "false",
     );
+  });
+
+  it("offers Revert for uncommitted working-tree diffs", () => {
+    render(<FileDiffViewer path="src/index.ts" type="M" />);
+
+    expect(screen.getByTestId("revert-file-button")).toBeInTheDocument();
+  });
+
+  it("hides Revert for commit-scoped diffs", () => {
+    render(
+      <FileDiffViewer path="src/index.ts" type="M" commit="abc1234" />,
+    );
+
+    expect(screen.queryByTestId("revert-file-button")).not.toBeInTheDocument();
+  });
+
+  it("opens a confirmation modal before reverting", async () => {
+    const user = userEvent.setup();
+    render(<FileDiffViewer path="src/index.ts" type="M" />);
+
+    await user.click(screen.getByTestId("revert-file-button"));
+
+    expect(screen.getByTestId("confirmation-modal")).toBeInTheDocument();
   });
 });

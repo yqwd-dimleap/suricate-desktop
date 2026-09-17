@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { GitChangeStatus } from "#/api/open-hands.types";
 import { FileDiffViewer } from "./file-diff-viewer";
 
@@ -14,14 +14,34 @@ export interface DiffChangeListProps {
    * the working-tree diff.
    */
   commit?: string;
+  /**
+   * One-shot path to expand on mount / when the deep-link request arrives.
+   * Cleared via `onAutoExpandPathHandled` after it is applied.
+   */
+  autoExpandPath?: string | null;
+  onAutoExpandPathHandled?: () => void;
 }
 
 /**
  * Single-open accordion of file diffs. Expanding one path collapses the
  * previously open one (same behavior as the Commits list).
  */
-export function DiffChangeList({ changes, commit }: DiffChangeListProps) {
+export function DiffChangeList({
+  changes,
+  commit,
+  autoExpandPath = null,
+  onAutoExpandPathHandled,
+}: DiffChangeListProps) {
   const [expandedPath, setExpandedPath] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!autoExpandPath) return;
+    const match = changes.find((change) => change.path === autoExpandPath);
+    if (match) {
+      setExpandedPath(match.path);
+    }
+    onAutoExpandPathHandled?.();
+  }, [autoExpandPath, changes, onAutoExpandPathHandled]);
 
   return (
     <div data-testid="diff-change-list" className="w-full flex flex-col">

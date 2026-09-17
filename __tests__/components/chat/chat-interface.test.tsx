@@ -877,7 +877,7 @@ describe("ChatInterface - Auto-scroll on submit (issue #817)", () => {
 });
 
 describe("ChatInterface - Status Indicator", () => {
-  it("shows the unresolved terminal action while the agent is running", () => {
+  it("does not show a live activity chip while the agent is running", () => {
     const terminalAction: ActionEvent = {
       id: "action-running-terminal",
       timestamp: "2026-07-27T18:00:00Z",
@@ -911,18 +911,6 @@ describe("ChatInterface - Status Indicator", () => {
     });
     vi.mocked(useAgentState).mockReturnValue({
       curAgentState: AgentState.RUNNING,
-    });
-
-    renderChatInterfaceWithRouter();
-
-    const chip = screen.getByTestId("live-activity-chip");
-    expect(chip).toHaveTextContent("ACTION_MESSAGE$RUN");
-    expect(chip.parentElement).toHaveClass("inset-x-9");
-  });
-
-  it("hides the live activity chip when the agent is no longer running", () => {
-    vi.mocked(useAgentState).mockReturnValue({
-      curAgentState: AgentState.PAUSED,
     });
 
     renderChatInterfaceWithRouter();

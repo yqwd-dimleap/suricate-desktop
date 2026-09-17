@@ -9,6 +9,7 @@ import {
 import { handleCanvasUIAction, openWorkspaceFile } from "#/services/canvas-ui";
 import { useConversationStore } from "#/stores/conversation-store";
 import { useFilesTabStore } from "#/stores/files-tab-store";
+import { usePreviewTabStore } from "#/stores/preview-tab-store";
 import type { CanvasUIAction } from "#/types/agent-server/core";
 import { isCanvasUIActionEvent } from "#/types/agent-server/type-guards";
 
@@ -30,6 +31,11 @@ describe("handleCanvasUIAction", () => {
       selectedPath: null,
       selectedConversationId: null,
       openPaths: [],
+      stickyReveals: {},
+    });
+    usePreviewTabStore.setState({
+      selectedPath: null,
+      selectedConversationId: null,
     });
   });
 
@@ -47,13 +53,31 @@ describe("handleCanvasUIAction", () => {
     expect(useFilesTabStore.getState().openPaths).toEqual(["docs/intro.html"]);
   });
 
-  it("show_preview selects the files tab and the requested path", () => {
+  it("navigate_to_file parses Cursor-style path:line into a sticky reveal", () => {
     handleCanvasUIAction(
-      action({ command: "show_preview", path: "report.html" }),
+      action({ command: "navigate_to_file", path: "src/app.ts:12-14" }),
+      "conv-1",
     );
 
-    expect(useConversationStore.getState().selectedTab).toBe("files");
-    expect(useFilesTabStore.getState().selectedPath).toBe("report.html");
+    expect(useFilesTabStore.getState().selectedPath).toBe("src/app.ts");
+    expect(useFilesTabStore.getState().stickyReveals["src/app.ts"]).toEqual({
+      startLine: 12,
+      endLine: 14,
+      nonce: 1,
+    });
+  });
+
+  it("show_preview selects the preview tab and the requested path", () => {
+    handleCanvasUIAction(
+      action({ command: "show_preview", path: "report.html" }),
+      "conv-1",
+    );
+
+    expect(useConversationStore.getState().selectedTab).toBe("preview");
+    expect(useConversationStore.getState().isRightPanelShown).toBe(true);
+    expect(usePreviewTabStore.getState().selectedPath).toBe("report.html");
+    expect(usePreviewTabStore.getState().selectedConversationId).toBe("conv-1");
+    expect(useFilesTabStore.getState().selectedPath).toBeNull();
   });
 
   it("open_tab switches to a valid tab without touching selectedPath", () => {
@@ -143,6 +167,7 @@ describe("openWorkspaceFile", () => {
       selectedPath: null,
       selectedConversationId: null,
       openPaths: [],
+      stickyReveals: {},
     });
   });
 

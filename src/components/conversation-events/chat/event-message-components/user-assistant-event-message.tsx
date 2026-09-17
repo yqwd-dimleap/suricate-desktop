@@ -16,6 +16,9 @@ import { useForkConversation } from "#/hooks/mutation/use-fork-conversation";
 import { useConversationStore } from "#/stores/conversation-store";
 import ConversationService from "#/api/conversation-service/conversation-service.api";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
+import { ConfirmationModal } from "#/components/shared/modals/confirmation-modal";
+import { useAgentReviewStore } from "#/stores/agent-review-store";
+import { useAgentReviewActions } from "#/hooks/mutation/use-agent-review-actions";
 
 interface UserAssistantEventMessageProps {
   event: MessageEvent;
@@ -31,6 +34,19 @@ export function UserAssistantEventMessage({
   const { navigate } = useNavigation();
   const { conversationId } = useOptionalConversationId();
   const isCloud = useActiveBackend().backend.kind === "cloud";
+  const reviewActions = useAgentReviewActions();
+  const checkpointId =
+    event.source === "user" && event.id !== undefined ? String(event.id) : null;
+  const hasCheckpointFiles = useAgentReviewStore((state) => {
+    if (!conversationId || !checkpointId) {
+      return false;
+    }
+    const files =
+      state.byConversation[conversationId]?.checkpoints[checkpointId]?.files ??
+      {};
+    return Object.keys(files).length > 0;
+  });
+  const [isRestoreOpen, setIsRestoreOpen] = React.useState(false);
   const { mutate: forkConversation, isPending: isForking } =
     useForkConversation();
   const setMessageToSend = useConversationStore(
@@ -126,6 +142,31 @@ export function UserAssistantEventMessage({
       </ChatMessage>
       {event.source === "agent" && event.critic_result != null && (
         <CriticResultDisplay criticResult={event.critic_result} />
+      )}
+      {hasCheckpointFiles && checkpointId && (
+        <>
+          <button
+            type="button"
+            data-testid="restore-checkpoint"
+            className="ml-10 mt-1 rounded px-2 py-0.5 text-xs text-[var(--oh-text-secondary)] hover:bg-[var(--oh-interactive-hover)] hover:text-[var(--oh-foreground)]"
+            onClick={() => setIsRestoreOpen(true)}
+          >
+            {t(I18nKey.REVIEW$RESTORE_CHECKPOINT)}
+          </button>
+          {isRestoreOpen && (
+            <ConfirmationModal
+              text={t(I18nKey.REVIEW$RESTORE_CHECKPOINT)}
+              confirmText={t(I18nKey.REVIEW$RESTORE_CHECKPOINT)}
+              isConfirming={reviewActions.isPending}
+              onCancel={() => setIsRestoreOpen(false)}
+              onConfirm={() => {
+                void reviewActions.restoreCheckpoint(checkpointId).then(() => {
+                  setIsRestoreOpen(false);
+                });
+              }}
+            />
+          )}
+        </>
       )}
     </>
   );

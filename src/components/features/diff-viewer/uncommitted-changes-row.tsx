@@ -12,6 +12,8 @@ export interface UncommittedChangesRowProps {
   changes: DiffChangeListItem[];
   isExpanded: boolean;
   onToggle: () => void;
+  autoExpandPath?: string | null;
+  onAutoExpandPathHandled?: () => void;
 }
 
 /**
@@ -23,6 +25,8 @@ export function UncommittedChangesRow({
   changes,
   isExpanded,
   onToggle,
+  autoExpandPath = null,
+  onAutoExpandPathHandled,
 }: UncommittedChangesRowProps) {
   const { t } = useTranslation("openhands");
 
@@ -67,7 +71,13 @@ export function UncommittedChangesRow({
         testId="uncommitted-changes-row-content"
         className="w-full flex flex-col pl-6"
       >
-        {changes.length > 0 ? <DiffChangeList changes={changes} /> : null}
+        {changes.length > 0 ? (
+          <DiffChangeList
+            changes={changes}
+            autoExpandPath={autoExpandPath}
+            onAutoExpandPathHandled={onAutoExpandPathHandled}
+          />
+        ) : null}
       </AccordionPanel>
     </div>
   );

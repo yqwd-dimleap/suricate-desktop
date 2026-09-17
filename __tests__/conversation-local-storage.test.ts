@@ -227,7 +227,7 @@ describe("conversation localStorage utilities", () => {
       expect(state.selectedTab).toBe("files");
     });
 
-    it("migrates a stored Diffs (changes) tab selection to Commits", () => {
+    it("keeps a stored Changes tab selection", () => {
       const conversationId = "conv-123";
       const consolidatedKey = `${LOCAL_STORAGE_KEYS.CONVERSATION_STATE}-${conversationId}`;
 
@@ -241,15 +241,14 @@ describe("conversation localStorage utilities", () => {
 
       const state = getConversationState(conversationId);
 
-      expect(state.selectedTab).toBe("commits");
+      expect(state.selectedTab).toBe("changes");
     });
 
-    it("filters obsolete tabs out of stored unpinnedTabs (editor / served / app / changes)", () => {
+    it("filters obsolete tabs out of stored unpinnedTabs (editor / served / app)", () => {
       // Returning users may have unpinned the now-removed Editor, Served,
-      // App, or Diffs (`changes`) tabs in a previous version. Those names
-      // should not survive the read — otherwise they linger forever in
-      // localStorage since the UI has no way to surface them again to be
-      // re-pinned.
+      // or App tabs in a previous version. Those names should not survive
+      // the read — otherwise they linger forever in localStorage since the
+      // UI has no way to surface them again to be re-pinned.
       const conversationId = "conv-123";
       const consolidatedKey = `${LOCAL_STORAGE_KEYS.CONVERSATION_STATE}-${conversationId}`;
 
@@ -257,14 +256,14 @@ describe("conversation localStorage utilities", () => {
         consolidatedKey,
         JSON.stringify({
           selectedTab: "files",
-          unpinnedTabs: ["editor", "changes", "served", "app", "terminal"],
+          unpinnedTabs: ["editor", "served", "app", "terminal", "changes"],
         }),
       );
 
       const state = getConversationState(conversationId);
 
-      // Obsolete names are dropped; still-valid `terminal` stays.
-      expect(state.unpinnedTabs).toEqual(["terminal"]);
+      // Obsolete names are dropped; still-valid `terminal` / `changes` stay.
+      expect(state.unpinnedTabs).toEqual(["terminal", "changes"]);
     });
   });
 

@@ -26,7 +26,7 @@ export function OutputPane({ output, exitCode, copy = true }: OutputPaneProps) {
   return (
     <div className="flex flex-col gap-1">
       {showExitBadge && (
-        <span className="self-start rounded bg-status-fail-bg px-1.5 py-0.5 font-mono text-xs text-status-fail-text">
+        <span className="self-start rounded bg-[var(--oh-status-error)]/15 px-1.5 py-0.5 font-mono text-xs text-[var(--oh-status-error)]">
           {t(I18nKey.OBSERVATION$EXIT_CODE, { code: exitCode })}
         </span>
       )}

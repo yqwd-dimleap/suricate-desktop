@@ -1,7 +1,14 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { LayoutGroup } from "framer-motion";
-import { Gauge, Globe, ListTodo, SquareChevronRight } from "lucide-react";
+import {
+  Gauge,
+  Globe,
+  ListTodo,
+  SquareChevronRight,
+  Frame,
+  GitCommitHorizontal,
+} from "lucide-react";
 import { LuFileDiff } from "react-icons/lu";
 import DocumentIcon from "#/icons/document.svg?react";
 import DoubleCheckIcon from "#/icons/double-check.svg?react";
@@ -94,9 +101,27 @@ export function ConversationTabs({
       label: t(I18nKey.COMMON$FILES),
     },
     {
+      tabValue: "preview",
+      isActive: isTabActive("preview"),
+      icon: Frame,
+      onClick: () => selectTab("preview"),
+      tooltipContent: t(I18nKey.COMMON$PREVIEW),
+      tooltipAriaLabel: t(I18nKey.COMMON$PREVIEW),
+      label: t(I18nKey.COMMON$PREVIEW),
+    },
+    {
+      tabValue: "changes",
+      isActive: isTabActive("changes"),
+      icon: LuFileDiff,
+      onClick: () => selectTab("changes"),
+      tooltipContent: t(I18nKey.COMMON$CHANGES),
+      tooltipAriaLabel: t(I18nKey.COMMON$CHANGES),
+      label: t(I18nKey.COMMON$CHANGES),
+    },
+    {
       tabValue: "commits",
       isActive: isTabActive("commits"),
-      icon: LuFileDiff,
+      icon: GitCommitHorizontal,
       onClick: () => selectTab("commits"),
       tooltipContent: t(I18nKey.DIFF_VIEWER$COMMITS),
       tooltipAriaLabel: t(I18nKey.DIFF_VIEWER$COMMITS),
@@ -142,8 +167,8 @@ export function ConversationTabs({
   ];
 
   if (hasTaskList) {
-    // Insert after the file-related tabs.
-    tabs.splice(2, 0, {
+    // Insert after the file-related tabs (files / preview / changes / commits).
+    tabs.splice(4, 0, {
       tabValue: "tasklist",
       isActive: isTabActive("tasklist"),
       icon: DoubleCheckIcon,

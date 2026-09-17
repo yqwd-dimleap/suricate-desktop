@@ -27,7 +27,7 @@ export const bashVisualizer = defineVisualizer({
       <div className="flex flex-col gap-2">
         {command && <CodeBlock code={command} language="bash" />}
         {(risk === SecurityRisk.HIGH || risk === SecurityRisk.MEDIUM) && (
-          <span className="text-xs text-status-fail-text">
+          <span className="text-xs text-[var(--oh-status-error)]">
             {t(
               risk === SecurityRisk.HIGH
                 ? I18nKey.SECURITY$HIGH_RISK

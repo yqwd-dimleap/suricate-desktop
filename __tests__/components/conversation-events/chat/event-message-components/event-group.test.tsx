@@ -97,6 +97,25 @@ describe("EventGroup", () => {
     expect(screen.queryByTestId("child")).not.toBeInTheDocument();
   });
 
+  it("shows grouped children when defaultExpanded is set", () => {
+    const events = [
+      makeBashObservation("o1", "a1", "ls"),
+      makeBashAction("a2", "kill 1"),
+    ];
+
+    renderWithProviders(
+      <EventGroup events={events} defaultExpanded>
+        <div data-testid="child">child content</div>
+      </EventGroup>,
+    );
+
+    expect(screen.getByTestId("event-group-toggle")).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    );
+    expect(screen.getByTestId("child")).toBeInTheDocument();
+  });
+
   it("renders a progress summary and the running action title while in flight", () => {
     const events = [
       makeBashObservation("o1", "a1", "ls"),

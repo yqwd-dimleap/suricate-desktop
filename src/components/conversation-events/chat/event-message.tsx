@@ -23,6 +23,7 @@ import {
 import { useConfig } from "#/hooks/query/use-config";
 import { useConversationStore } from "#/stores/conversation-store";
 import { useAgentState, usePlanningAgentState } from "#/hooks/use-agent-state";
+import { useReasoningStreamActive } from "#/hooks/use-reasoning-stream-active";
 import { AgentState } from "#/types/agent-state";
 import { ChatMessage } from "#/components/features/chat/chat-message";
 import { GoalStatusContent } from "#/components/features/chat/goal-status-content";
@@ -184,6 +185,28 @@ export function EventMessage({
   // Read isFromPlanningAgent directly from the event object
   const isFromPlanningAgent = event.isFromPlanningAgent || false;
 
+  // "Agent is still working on this turn" — the coarse gate. A reasoning
+  // section is live while it is the streaming tail AND the agent is running.
+  // The branches that render the in-progress "Thinking" shimmer refine this
+  // further (the delta branch, for instance, stops it the moment the answer
+  // starts streaming), so it flips to a settled "Thought" as soon as the
+  // reasoning is no longer the active output — not only when the final
+  // event supersedes the delta.
+  const isThinking = isLastMessage && isAgentRunning;
+
+  // Refine "isThinking" down to "is the model still EMITTING reasoning".
+  // A trailing delta grows its content on every token, so this flips to
+  // settled after a short quiet period (tool call about to be issued, or turn
+  // done) instead of waiting for the final event to supersede the delta.
+  const isDeltaEvent = isStreamingDeltaEvent(event);
+  const reasoningStreamFingerprint = isDeltaEvent
+    ? `${event.reasoning_content ?? ""}\u0000${event.content ?? ""}`
+    : "";
+  const reasoningStreamActive = useReasoningStreamActive(
+    reasoningStreamFingerprint,
+    isThinking && isDeltaEvent,
+  );
+
   // Common props for components that need them
   const commonProps = {
     isLastMessage,
@@ -230,9 +253,21 @@ export function EventMessage({
     const reasoningContent = [event.reasoning_content ?? "", inlineThink]
       .filter(Boolean)
       .join("\n\n");
+    // The model streams reasoning first, then the answer, in the SAME delta
+    // (tokens merge into one event). The reasoning is only "in progress" while
+    // it is still the active output: it settles the moment the first answer
+    // token lands (`message` non-empty) or the stream goes quiet (tool call /
+    // turn done) — not only when the final event supersedes the delta.
+    const reasoningIsLive =
+      isThinking && message.trim() === "" && reasoningStreamActive;
     return (
       <>
-        {reasoningContent && <CollapsibleThinking content={reasoningContent} />}
+        {reasoningContent && (
+          <CollapsibleThinking
+            content={reasoningContent}
+            isThinking={reasoningIsLive}
+          />
+        )}
         {message && (
           <ChatMessage
             type="agent"
@@ -269,12 +304,7 @@ export function EventMessage({
     return (
       <>
         {reasoningContent && <CollapsibleThinking content={reasoningContent} />}
-        {!suppressThought && (
-          <ThoughtEventMessage
-            event={event}
-            isFromPlanningAgent={isFromPlanningAgent}
-          />
-        )}
+        {!suppressThought && <ThoughtEventMessage event={event} />}
         <GenericEventMessageWrapper
           event={event}
           isLastMessage={isLastMessage}
@@ -327,10 +357,7 @@ export function EventMessage({
       <>
         {reasoningContent && <CollapsibleThinking content={reasoningContent} />}
         {shouldShowThought && (
-          <ThoughtEventMessage
-            event={correspondingAction}
-            isFromPlanningAgent={isFromPlanningAgent}
-          />
+          <ThoughtEventMessage event={correspondingAction} />
         )}
         <GenericEventMessageWrapper
           event={event}

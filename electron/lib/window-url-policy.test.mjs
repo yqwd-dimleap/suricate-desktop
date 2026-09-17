@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  buildDesktopAppOrigin,
   isExternalBrowsableUrl,
   isLoopbackAppUrl,
 } from "./window-url-policy.mjs";
@@ -59,4 +60,18 @@ describe("isExternalBrowsableUrl", () => {
   ])("denies everything the OS must not handle: %s", (url) => {
     expect(isExternalBrowsableUrl(url)).toBe(false);
   });
+});
+
+describe("buildDesktopAppOrigin", () => {
+  it("builds a localhost origin from the allocated ingress port", () => {
+    expect(buildDesktopAppOrigin(8000)).toBe("http://localhost:8000");
+    expect(buildDesktopAppOrigin(19123)).toBe("http://localhost:19123");
+  });
+
+  it.each([0, -1, 65536, 1.5, "abc", null, undefined])(
+    "rejects invalid ingress port %s",
+    (port) => {
+      expect(() => buildDesktopAppOrigin(port)).toThrow(/Invalid ingress port/);
+    },
+  );
 });

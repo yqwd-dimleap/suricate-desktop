@@ -24,7 +24,10 @@ import {
 import { getInvokeSkillItems } from "../event-content-helpers/get-invoke-skill-items";
 import { SkillReadyContentList } from "./skill-ready-content-list";
 import SkillsIcon from "#/icons/skills.svg?react";
-import { isMarkdownFileEditorEvent } from "#/components/features/chat/tool-visualizers/primitives/markdown-file-preview";
+import {
+  isMarkdownFilePath,
+  isMarkdownFileEditorEvent,
+} from "#/components/features/chat/tool-visualizers/primitives/markdown-file-preview";
 
 interface GenericEventMessageWrapperProps {
   event: OpenHandsEvent | SkillReadyEvent;
@@ -64,6 +67,38 @@ function getSkillKnowledge(
   return null;
 }
 
+/**
+ * Mutating file-editor observations that render the Cursor-style review card
+ * own their filename header — skip the outer "Edited …" GenericEventMessage
+ * chrome so the card isn't duplicated.
+ */
+function isSelfTitledFileEditorReview(
+  event: OpenHandsEvent | SkillReadyEvent,
+): boolean {
+  if (isSkillReadyEvent(event) || !isObservationEvent(event)) {
+    return false;
+  }
+  const { observation } = event;
+  if (
+    observation.kind !== "FileEditorObservation" &&
+    observation.kind !== "StrReplaceEditorObservation"
+  ) {
+    return false;
+  }
+  if (observation.error) {
+    return false;
+  }
+  if (observation.old_content != null && observation.new_content != null) {
+    return true;
+  }
+  return (
+    observation.command === "create" &&
+    observation.new_content != null &&
+    typeof observation.path === "string" &&
+    !isMarkdownFilePath(observation.path)
+  );
+}
+
 export function GenericEventMessageWrapper({
   event,
   correspondingAction,
@@ -76,6 +111,11 @@ export function GenericEventMessageWrapper({
     isObservationEvent(event) &&
     event.observation.kind === "TaskTrackerObservation"
   ) {
+    return <div>{details}</div>;
+  }
+
+  // Cursor-style file review cards include their own header.
+  if (isSelfTitledFileEditorReview(event)) {
     return <div>{details}</div>;
   }
 
