@@ -65,4 +65,42 @@ describe("FileTreeView", () => {
     expect(onSelectFile).toHaveBeenCalledTimes(1);
     expect(onSelectFile).toHaveBeenCalledWith("README.md");
   });
+
+  it("shows Cursor-style M / U / D badges from statusByPath", async () => {
+    const user = userEvent.setup();
+    const statusByPath = new Map([
+      ["src/a.ts", "M" as const],
+      ["src/b.ts", "A" as const],
+      ["src/c.ts", "D" as const],
+    ]);
+
+    render(
+      <FileTreeView
+        paths={["src/a.ts", "src/b.ts", "src/c.ts"]}
+        selectedPath={null}
+        onSelectFile={vi.fn()}
+        statusByPath={statusByPath}
+      />,
+    );
+
+    await user.click(screen.getByTestId("file-tree-dir-src"));
+
+    expect(screen.getByTestId("file-tree-git-status-src/a.ts")).toHaveTextContent(
+      "M",
+    );
+    expect(screen.getByTestId("file-tree-git-status-src/a.ts")).toHaveAttribute(
+      "data-git-status",
+      "M",
+    );
+    expect(screen.getByTestId("file-tree-git-status-src/b.ts")).toHaveTextContent(
+      "U",
+    );
+    expect(screen.getByTestId("file-tree-git-status-src/b.ts")).toHaveAttribute(
+      "data-git-status",
+      "A",
+    );
+    expect(screen.getByTestId("file-tree-git-status-src/c.ts")).toHaveTextContent(
+      "D",
+    );
+  });
 });

@@ -52,6 +52,11 @@ export function useSaveWorkspaceTextFile() {
         queryClient.invalidateQueries({
           queryKey: ["file_changes", conversationId],
         }),
+        // Keep Files gutters / Changes DiffEditor in sync with the just-written
+        // working tree (status list alone is not enough for cached diffs).
+        queryClient.invalidateQueries({
+          queryKey: ["file_diff", conversationId],
+        }),
       ]);
     },
   });

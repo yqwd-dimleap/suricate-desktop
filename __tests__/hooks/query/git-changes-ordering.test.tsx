@@ -261,6 +261,28 @@ describe("git change loading and ordering", () => {
     expect(getGitChanges).toHaveBeenCalledTimes(2);
   });
 
+  it("refreshes status for paths that remain across a refetch", async () => {
+    const { wrapper } = prepareHook();
+    getGitChanges
+      .mockResolvedValueOnce([makeChange("src/file.ts", "A")])
+      .mockResolvedValueOnce([makeChange("src/file.ts", "M")]);
+
+    const { result } = renderHook(() => useUnifiedGetGitChanges(), {
+      wrapper,
+    });
+    await waitFor(() =>
+      expect(result.current.data).toEqual([makeChange("src/file.ts", "A")]),
+    );
+
+    await act(async () => {
+      await result.current.refetch();
+    });
+
+    await waitFor(() =>
+      expect(result.current.data).toEqual([makeChange("src/file.ts", "M")]),
+    );
+  });
+
   it("ignores a refreshed payload when the backend returns the same array reference", async () => {
     const sharedChanges = [makeChange("src/original.ts")];
     const refresh = makeDeferred<GitChange[]>();

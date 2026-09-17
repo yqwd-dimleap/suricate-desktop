@@ -32,9 +32,19 @@ vi.mock("#/hooks/query/use-active-conversation", () => ({
 
 vi.mock("#/hooks/query/use-unified-get-git-changes", () => ({
   useUnifiedGetGitChanges: () => ({
-    data: [],
+    data: [
+      { path: "src/main.ts", status: "M" },
+      { path: "README.md", status: "A" },
+    ],
     isSuccess: true,
     isLoading: false,
+  }),
+}));
+
+vi.mock("#/hooks/query/use-unified-git-diff", () => ({
+  useUnifiedGitDiff: () => ({
+    data: undefined,
+    isSuccess: false,
   }),
 }));
 
@@ -251,6 +261,23 @@ describe("FilesTab", () => {
     expect(
       screen.getByTestId("file-quick-row-item-README.md"),
     ).toBeInTheDocument();
+  });
+
+  it("shows git status badges on changed files in the tree", async () => {
+    const user = userEvent.setup();
+    renderTab("c1");
+
+    expect(screen.getByTestId("file-tree-git-status-README.md")).toHaveTextContent(
+      "U",
+    );
+    expect(
+      screen.queryByTestId("file-tree-git-status-index.html"),
+    ).not.toBeInTheDocument();
+
+    await user.click(screen.getByTestId("file-tree-dir-src"));
+    expect(screen.getByTestId("file-tree-git-status-src/main.ts")).toHaveTextContent(
+      "M",
+    );
   });
 
   it("renders markdown content via MarkdownRenderer in rich mode", async () => {

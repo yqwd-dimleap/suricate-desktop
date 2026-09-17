@@ -52,7 +52,8 @@ export const useUnifiedGetGitChanges = () => {
     },
   });
 
-  // Latest changes should be on top
+  // Latest changes should be on top. Preserve first-seen order, but always
+  // take the fresh status/payload from the API for paths that remain.
   React.useEffect(() => {
     if (!result.isFetching && result.isSuccess && result.data) {
       const currentData = result.data;
@@ -61,23 +62,22 @@ export const useUnifiedGetGitChanges = () => {
       if (currentData !== previousDataRef.current) {
         previousDataRef.current = currentData;
 
-        // Figure out new items by comparing with what we already have
         if (Array.isArray(currentData)) {
-          const currentIds = new Set(currentData.map((item) => item.path));
-          const existingIds = new Set(orderedChanges.map((item) => item.path));
+          setOrderedChanges((prev) => {
+            const currentByPath = new Map(
+              currentData.map((item) => [item.path, item]),
+            );
+            const existingIds = new Set(prev.map((item) => item.path));
 
-          // Filter out items that already exist in orderedChanges
-          const newItems = currentData.filter(
-            (item) => !existingIds.has(item.path),
-          );
+            const newItems = currentData.filter(
+              (item) => !existingIds.has(item.path),
+            );
+            const existingItems = prev
+              .filter((item) => currentByPath.has(item.path))
+              .map((item) => currentByPath.get(item.path) ?? item);
 
-          // Filter out items that no longer exist in the API response
-          const existingItems = orderedChanges.filter((item) =>
-            currentIds.has(item.path),
-          );
-
-          // Add new items to the beginning
-          setOrderedChanges([...newItems, ...existingItems]);
+            return [...newItems, ...existingItems];
+          });
         } else {
           // If not an array, just use the data directly
           setOrderedChanges([currentData]);

@@ -1,9 +1,11 @@
 import { useState } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
 
+import type { GitChangeStatus } from "#/api/open-hands.types";
 import FileIcon from "#/icons/file.svg?react";
 import FolderIcon from "#/icons/folder.svg?react";
 import { FileTreeNode } from "#/utils/file-tree";
+import { getGitStatusBadge } from "#/utils/git-status-badge";
 import { cn } from "#/utils/utils";
 
 interface TreeNodeProps {
@@ -11,6 +13,7 @@ interface TreeNodeProps {
   depth: number;
   selectedPath: string | null;
   onSelectFile: (path: string) => void;
+  statusByPath?: ReadonlyMap<string, GitChangeStatus>;
 }
 
 export function TreeNode({
@@ -18,6 +21,7 @@ export function TreeNode({
   depth,
   selectedPath,
   onSelectFile,
+  statusByPath,
 }: TreeNodeProps) {
   const [isOpen, setIsOpen] = useState(false);
   const indentPx = 8 + depth * 12;
@@ -59,6 +63,7 @@ export function TreeNode({
                 depth={depth + 1}
                 selectedPath={selectedPath}
                 onSelectFile={onSelectFile}
+                statusByPath={statusByPath}
               />
             ))}
           </ul>
@@ -68,6 +73,9 @@ export function TreeNode({
   }
 
   const isSelected = selectedPath === node.path;
+  const status = statusByPath?.get(node.path);
+  const badge = status ? getGitStatusBadge(status) : null;
+
   return (
     <li>
       <button
@@ -85,7 +93,20 @@ export function TreeNode({
         style={{ paddingLeft: `${indentPx + 16}px` }}
       >
         <FileIcon className="w-3.5 h-3.5 shrink-0" />
-        <span className="truncate">{node.name}</span>
+        <span className="min-w-0 flex-1 truncate">{node.name}</span>
+        {badge ? (
+          <span
+            aria-hidden
+            data-testid={`file-tree-git-status-${node.path}`}
+            data-git-status={status}
+            className={cn(
+              "ml-auto shrink-0 pl-1 text-[11px] font-medium leading-none",
+              badge.className,
+            )}
+          >
+            {badge.letter}
+          </span>
+        ) : null}
       </button>
     </li>
   );

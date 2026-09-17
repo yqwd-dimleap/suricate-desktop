@@ -16,6 +16,21 @@ vi.mock("#/hooks/mutation/use-save-workspace-text-file", () => ({
   }),
 }));
 
+vi.mock("#/hooks/query/use-unified-get-git-changes", () => ({
+  useUnifiedGetGitChanges: () => ({
+    data: [],
+    isSuccess: true,
+    isLoading: false,
+  }),
+}));
+
+vi.mock("#/hooks/query/use-unified-git-diff", () => ({
+  useUnifiedGitDiff: () => ({
+    data: undefined,
+    isSuccess: false,
+  }),
+}));
+
 vi.mock("@monaco-editor/react", () => ({
   Editor: ({
     value,

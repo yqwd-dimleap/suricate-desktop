@@ -6,6 +6,8 @@ import { I18nKey } from "#/i18n/declaration";
 import { getLanguageFromPath } from "#/utils/get-language-from-path";
 import { useSaveWorkspaceTextFile } from "#/hooks/mutation/use-save-workspace-text-file";
 import { useOptionalConversationId } from "#/hooks/use-conversation-id";
+import { useUnifiedGetGitChanges } from "#/hooks/query/use-unified-get-git-changes";
+import { useUnifiedGitDiff } from "#/hooks/query/use-unified-git-diff";
 import { HunkReviewOverlay } from "./hunk-review-overlay";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
 import type { PendingFileReveal } from "#/stores/files-tab-store";
@@ -14,6 +16,11 @@ import {
   isDocumentDirty,
   useWorkspaceDocumentStore,
 } from "#/stores/workspace-document-store";
+import {
+  computeGitLineGutters,
+  gitGutterClassName,
+} from "#/utils/git-line-gutter";
+import type { GitChangeStatus } from "#/api/open-hands.types";
 
 interface EditableSourceViewProps {
   path: string;
@@ -28,8 +35,79 @@ const EDITOR_OPTIONS: MonacoEditor.IStandaloneEditorConstructionOptions = {
   automaticLayout: true,
   wordWrap: "on",
   renderValidationDecorations: "off",
+  lineDecorationsWidth: 5,
   scrollbar: { alwaysConsumeMouseWheel: false },
 };
+
+interface GitGutterEffectProps {
+  path: string;
+  draft: string;
+  editorRef: React.RefObject<MonacoEditor.IStandaloneCodeEditor | null>;
+  monacoRef: React.RefObject<Monaco | null>;
+}
+
+/**
+ * Mounted only when a conversation id is present so
+ * `useUnifiedGetGitChanges` / `useUnifiedGitDiff` can call
+ * `useConversationId` safely.
+ */
+function GitGutterEffect({
+  path,
+  draft,
+  editorRef,
+  monacoRef,
+}: GitGutterEffectProps) {
+  const decorationIdsRef = React.useRef<string[]>([]);
+  const { data: gitChanges } = useUnifiedGetGitChanges();
+  const gitStatus: GitChangeStatus | null = React.useMemo(
+    () => gitChanges?.find((change) => change.path === path)?.status ?? null,
+    [gitChanges, path],
+  );
+
+  const { data: gitDiff } = useUnifiedGitDiff({
+    filePath: path,
+    type: gitStatus ?? "M",
+    enabled: !!gitStatus && gitStatus !== "D",
+  });
+
+  React.useEffect(() => {
+    const editor = editorRef.current;
+    const monaco = monacoRef.current;
+    if (!editor || !monaco) {
+      return undefined;
+    }
+
+    const clearDecorations = () => {
+      decorationIdsRef.current = editor.deltaDecorations(
+        decorationIdsRef.current,
+        [],
+      );
+    };
+
+    if (!gitStatus || gitStatus === "D" || !gitDiff) {
+      clearDecorations();
+      return clearDecorations;
+    }
+
+    // Compare HEAD/base original against the buffer the user sees (draft),
+    // so unsaved edits still pick up gutter marks against the git base.
+    const gutters = computeGitLineGutters(gitDiff.original ?? "", draft);
+    decorationIdsRef.current = editor.deltaDecorations(
+      decorationIdsRef.current,
+      gutters.map((gutter) => ({
+        range: new monaco.Range(gutter.lineNumber, 1, gutter.lineNumber, 1),
+        options: {
+          isWholeLine: false,
+          linesDecorationsClassName: gitGutterClassName(gutter.kind),
+        },
+      })),
+    );
+
+    return clearDecorations;
+  }, [draft, editorRef, gitDiff, gitStatus, monacoRef, path]);
+
+  return null;
+}
 
 /**
  * Editable Monaco view for workspace text files. Drafts live in
@@ -48,8 +126,10 @@ export function EditableSourceView({
   const editorRef = React.useRef<MonacoEditor.IStandaloneCodeEditor | null>(
     null,
   );
+  const monacoRef = React.useRef<Monaco | null>(null);
   const saveRef = React.useRef<() => void>(() => undefined);
   const [localDraft, setLocalDraft] = React.useState(text);
+  const [editorReady, setEditorReady] = React.useState(false);
 
   const document = useWorkspaceDocumentStore((state) =>
     conversationId ? state.byConversation[conversationId]?.[path] : undefined,
@@ -194,6 +274,14 @@ export function EditableSourceView({
         </button>
       </div>
       <HunkReviewOverlay path={path} dirty={dirty || conflict} />
+      {conversationId && editorReady ? (
+        <GitGutterEffect
+          path={path}
+          draft={draft}
+          editorRef={editorRef}
+          monacoRef={monacoRef}
+        />
+      ) : null}
       <div className="min-h-0 flex-1">
         <Editor
           path={path}
@@ -203,6 +291,8 @@ export function EditableSourceView({
           options={EDITOR_OPTIONS}
           onMount={(editor, monaco: Monaco) => {
             editorRef.current = editor;
+            monacoRef.current = monaco;
+            setEditorReady(true);
             editor.addCommand(
               monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS,
               () => {

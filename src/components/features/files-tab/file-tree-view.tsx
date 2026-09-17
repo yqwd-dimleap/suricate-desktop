@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 
+import type { GitChangeStatus } from "#/api/open-hands.types";
 import { I18nKey } from "#/i18n/declaration";
 import { buildFileTree } from "#/utils/file-tree";
 import { TreeNode } from "./tree-node";
@@ -9,12 +10,15 @@ interface FileTreeViewProps {
   paths: string[];
   selectedPath: string | null;
   onSelectFile: (path: string) => void;
+  /** Optional git status map keyed by the same paths shown in the tree. */
+  statusByPath?: ReadonlyMap<string, GitChangeStatus>;
 }
 
 export function FileTreeView({
   paths,
   selectedPath,
   onSelectFile,
+  statusByPath,
 }: FileTreeViewProps) {
   const { t } = useTranslation("openhands");
   const root = useMemo(() => buildFileTree(paths), [paths]);
@@ -36,6 +40,7 @@ export function FileTreeView({
           depth={0}
           selectedPath={selectedPath}
           onSelectFile={onSelectFile}
+          statusByPath={statusByPath}
         />
       ))}
     </ul>

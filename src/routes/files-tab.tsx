@@ -40,6 +40,8 @@ import { ResizeHandle } from "#/components/ui/resize-handle";
 import RefreshIcon from "#/icons/u-refresh.svg?react";
 import LinkExternalIcon from "#/icons/link-external.svg?react";
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
+import { useUnifiedGetGitChanges } from "#/hooks/query/use-unified-get-git-changes";
+import type { GitChangeStatus } from "#/api/open-hands.types";
 
 /**
  * Workspace file browser. Diff/Commits live in the sibling Commits
@@ -85,6 +87,15 @@ function FilesTab() {
 
   const filesQuery = useWorkspaceFiles();
   const paths = useMemo(() => filesQuery.data ?? [], [filesQuery.data]);
+
+  const { data: gitChanges } = useUnifiedGetGitChanges();
+  const statusByPath = useMemo(() => {
+    const map = new Map<string, GitChangeStatus>();
+    for (const change of gitChanges ?? []) {
+      map.set(change.path, change.status);
+    }
+    return map;
+  }, [gitChanges]);
 
   const storedSelectedPath = useFilesTabStore((s) => s.selectedPath);
   const selectedConversationId = useFilesTabStore(
@@ -230,6 +241,7 @@ function FilesTab() {
                     paths={paths}
                     selectedPath={selectedPath}
                     onSelectFile={handleSelectFile}
+                    statusByPath={statusByPath}
                   />
                 </aside>
                 <ResizeHandle

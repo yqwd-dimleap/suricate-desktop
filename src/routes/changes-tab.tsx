@@ -128,6 +128,7 @@ function ChangesTab() {
                 paths={paths}
                 selectedPath={selectedPath}
                 onSelectFile={handleSelectFile}
+                statusByPath={statusByPath}
               />
             )}
           </div>

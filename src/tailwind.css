@@ -77,6 +77,10 @@
   --oh-color-content-2: var(--cool-grey-50);
   --oh-background: var(--cool-grey-950);
   --oh-foreground: var(--cool-grey-100);
+  /* Git SCM indicators (Explorer badges + Monaco gutter) — Cursor-like */
+  --oh-git-modified: #e2c08d;
+  --oh-git-added: #73c991;
+  --oh-git-deleted: #f14c4c;
   --oh-surface: var(--cool-grey-925);
   --oh-surface-foreground: var(--cool-grey-100);
   --oh-surface-raised: var(--cool-grey-900);  /* elevated within a panel */
@@ -636,6 +640,21 @@ button.extension-module-card-interactive {
   background-clip: text;
   -webkit-text-fill-color: transparent;
   animation: gradient-slide 1.25s linear infinite;
+}
+
+/* Monaco linesDecorationsClassName for Files-tab git gutter bars */
+.git-gutter-added {
+  background: var(--oh-git-added);
+  width: 3px !important;
+  margin-left: 3px;
+  border-radius: 1px;
+}
+
+.git-gutter-modified {
+  background: var(--oh-git-modified);
+  width: 3px !important;
+  margin-left: 3px;
+  border-radius: 1px;
 }
 
 /* CTA card gradient and shadow */
