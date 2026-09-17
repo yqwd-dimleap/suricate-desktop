@@ -5,9 +5,9 @@ import {
 } from "#/components/conversation-events/chat/event-message-components/settled-thinking-label";
 
 describe("getSettledThinkingLabel", () => {
-  it("uses plain Thought when duration was never measured", () => {
+  it("uses Thought briefly when duration was never measured", () => {
     expect(getSettledThinkingLabel(null)).toEqual({
-      key: "OBSERVATION_MESSAGE$THINK",
+      key: "THINKING$SETTLED_BRIEF",
     });
   });
 

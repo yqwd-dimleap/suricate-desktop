@@ -43,4 +43,19 @@ describe("GenericEventMessage", () => {
       screen.getByTestId("generic-event-message-expand"),
     ).toHaveAttribute("aria-expanded", "true");
   });
+
+  it("keeps the expand chevron adjacent to the truncated title", () => {
+    renderWithProviders(
+      <GenericEventMessage
+        title="Ran cd /Users/jack.lei/Documents/llm/LlamaFactory && grep …"
+        details={<div data-testid="bash-details">log output</div>}
+      />,
+    );
+
+    const title = screen.getByTestId("generic-event-message-title");
+    const expand = screen.getByTestId("generic-event-message-expand");
+    // Same flex parent → chevron sits next to the title, not justify-between
+    // on the far right of the row.
+    expect(title.parentElement).toContainElement(expand);
+  });
 });

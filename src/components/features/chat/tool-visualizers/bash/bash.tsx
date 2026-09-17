@@ -2,17 +2,17 @@ import React from "react";
 import { useTranslation } from "react-i18next";
 import { SecurityRisk } from "#/types/agent-server/core";
 import { I18nKey } from "#/i18n/declaration";
+import { CopyableContentWrapper } from "#/components/shared/buttons/copyable-content-wrapper";
 import { defineVisualizer } from "../define";
 import { textFromContent } from "../text-content";
-import { CodeBlock } from "../primitives/code-block";
-import { OutputPane } from "../primitives/output-pane";
+
+/** Cap the terminal pane so long logs scroll instead of blowing up the chat. */
+const TERMINAL_MAX_HEIGHT_CLASS = "max-h-64";
 
 /**
- * Bash / terminal visualizer. The action card shows the command (plus a risk
- * warning for HIGH/MEDIUM actions); the observation card shows the command and
- * its output (with an exit-code badge). Both the command and the output carry a
- * hover copy button. Covers both the `execute_bash` and `terminal` tools, which
- * carry the same `command` / `content` / `exit_code` fields.
+ * Bash / terminal visualizer. Cursor-style: one scrollable terminal pane with
+ * the full command, a blank line, then the execution log. Covers both the
+ * `execute_bash` and `terminal` tools.
  */
 export const bashVisualizer = defineVisualizer({
   actionKinds: ["ExecuteBashAction", "TerminalAction"],
@@ -22,10 +22,41 @@ export const bashVisualizer = defineVisualizer({
     const command =
       observation?.observation.command ?? action?.action.command ?? "";
     const risk = action?.security_risk;
+    const output = observation
+      ? textFromContent(observation.observation.content)
+      : "";
+    const exitCode = observation?.observation.exit_code;
+    const showExitBadge = exitCode != null && exitCode !== 0 && exitCode !== -1;
+
+    const logText = output.trim()
+      ? output
+      : observation
+        ? t(I18nKey.OBSERVATION$COMMAND_NO_OUTPUT)
+        : "";
+
+    // One pane: command, then a blank line, then the log (Cursor-style).
+    const terminalText = [command, logText].filter(Boolean).join("\n\n");
+    const copyText = [command, output.trim() || null]
+      .filter(Boolean)
+      .join("\n\n");
+
+    const scrollRef = React.useRef<HTMLPreElement>(null);
+
+    // Keep the viewport pinned to the latest log lines while output grows.
+    React.useLayoutEffect(() => {
+      const node = scrollRef.current;
+      if (!node) {
+        return;
+      }
+      node.scrollTop = node.scrollHeight;
+    }, [terminalText]);
+
+    if (!terminalText) {
+      return null;
+    }
 
     return (
-      <div className="flex flex-col gap-2">
-        {command && <CodeBlock code={command} language="bash" />}
+      <div className="flex flex-col gap-1.5" data-testid="bash-visualizer-body">
         {(risk === SecurityRisk.HIGH || risk === SecurityRisk.MEDIUM) && (
           <span className="text-xs text-[var(--oh-status-error)]">
             {t(
@@ -35,12 +66,26 @@ export const bashVisualizer = defineVisualizer({
             )}
           </span>
         )}
-        {observation && (
-          <OutputPane
-            output={textFromContent(observation.observation.content)}
-            exitCode={observation.observation.exit_code}
-          />
+        {showExitBadge && (
+          <span className="self-start rounded bg-[var(--oh-status-error)]/15 px-1.5 py-0.5 font-mono text-xs text-[var(--oh-status-error)]">
+            {t(I18nKey.OBSERVATION$EXIT_CODE, { code: exitCode })}
+          </span>
         )}
+        <CopyableContentWrapper text={copyText || terminalText}>
+          <pre
+            ref={scrollRef}
+            data-testid="bash-visualizer-terminal"
+            className={`overflow-x-auto overflow-y-auto rounded-lg bg-[var(--oh-surface)] p-3 font-mono text-xs leading-5 text-[var(--oh-foreground)] whitespace-pre-wrap break-words ${TERMINAL_MAX_HEIGHT_CLASS}`}
+          >
+            {command ? (
+              <span data-testid="bash-visualizer-command">{command}</span>
+            ) : null}
+            {command && logText ? "\n\n" : null}
+            {logText ? (
+              <span data-testid="bash-visualizer-output">{logText}</span>
+            ) : null}
+          </pre>
+        </CopyableContentWrapper>
       </div>
     );
   },

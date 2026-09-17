@@ -146,8 +146,7 @@ describe("fileEditorVisualizer", () => {
     });
   });
 
-  it("offers Keep and Revert on mutating edit observations", async () => {
-    const user = userEvent.setup();
+  it("does not show Keep/Revert on mutating edit observations", () => {
     renderVisualizer(
       <Body
         observation={fileEditorObservation({
@@ -160,20 +159,20 @@ describe("fileEditorVisualizer", () => {
       />,
     );
 
-    expect(screen.getByTestId("file-editor-keep-button")).toBeInTheDocument();
-    expect(screen.getByTestId("file-editor-revert-button")).toBeInTheDocument();
-
-    await user.click(screen.getByTestId("file-editor-keep-button"));
-
+    expect(screen.getByTestId("file-editor-review-card")).toBeInTheDocument();
     expect(
       screen.queryByTestId("file-editor-keep-button"),
     ).not.toBeInTheDocument();
     expect(
       screen.queryByTestId("file-editor-revert-button"),
     ).not.toBeInTheDocument();
+    // Chevron sits next to +/- (not pushed to the far right by review actions).
+    expect(
+      screen.getByTestId("file-editor-review-expand"),
+    ).toBeInTheDocument();
   });
 
-  it("hides Keep/Revert for view observations", () => {
+  it("hides the review card for view observations", () => {
     renderVisualizer(
       <Body
         observation={fileEditorObservation({
@@ -190,9 +189,6 @@ describe("fileEditorVisualizer", () => {
 
     expect(
       screen.queryByTestId("file-editor-review-card"),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByTestId("file-editor-keep-button"),
     ).not.toBeInTheDocument();
   });
 
@@ -336,27 +332,6 @@ describe("fileEditorVisualizer", () => {
         endLine: 2,
       }),
     );
-  });
-
-  it("clears the sticky highlight when Keep is clicked", async () => {
-    const user = userEvent.setup();
-    renderVisualizer(
-      <Body
-        observation={fileEditorObservation({
-          command: "str_replace",
-          path: "/workspace/app.ts",
-          old_content: "a",
-          new_content: "b",
-          prev_exist: true,
-        })}
-      />,
-    );
-
-    await user.click(screen.getByTestId("file-editor-review-filename"));
-    expect(useFilesTabStore.getState().stickyReveals["app.ts"]).toBeDefined();
-
-    await user.click(screen.getByTestId("file-editor-keep-button"));
-    expect(useFilesTabStore.getState().stickyReveals["app.ts"]).toBeUndefined();
   });
 
   it("keeps markdown view observations as a CodeBlock, not a rich preview", () => {

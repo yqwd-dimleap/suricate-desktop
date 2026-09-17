@@ -22,9 +22,8 @@ interface CollapsibleThinkingProps {
 
 /**
  * Cursor-style thinking header: compact chevron + shimmering "Thinking" +
- * muted elapsed seconds while live; settles to "Thought briefly",
- * "Thought Ns", or plain "Thought". Collapsed by default so the chat stays
- * compact.
+ * muted elapsed seconds while live; settles to "Thought briefly" or
+ * "Thought Ns". Collapsed by default so the chat stays compact.
  */
 export function CollapsibleThinking({
   content,
@@ -92,9 +91,7 @@ export function CollapsibleThinking({
                 ? t(I18nKey.THINKING$SETTLED_DURATION, {
                     seconds: settledLabel.seconds,
                   })
-                : settledLabel.key === "THINKING$SETTLED_BRIEF"
-                  ? t(I18nKey.THINKING$SETTLED_BRIEF)
-                  : t(I18nKey.OBSERVATION_MESSAGE$THINK)}
+                : t(I18nKey.THINKING$SETTLED_BRIEF)}
             </span>
           )
         )}

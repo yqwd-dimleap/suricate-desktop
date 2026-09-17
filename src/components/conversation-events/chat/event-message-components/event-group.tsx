@@ -46,14 +46,14 @@ interface EventGroupProps {
  * events into a single summary card.
  *
  * Collapsed while running (`isFinalized=false` and a pending action):
- *   - Left: latest action title
+ *   - Left: latest action title + chevron
  *   - Right: progress count + spinner
  *
  * Collapsed when idle (no pending action):
  *   - Cursor-style activity summary when the group has files/searches/commands
  *     ("Editing N files, explored M searches, ran K commands +X -Y")
  *   - Otherwise the legacy "{count} actions completed" string
- *   - Chevron on the right expands the per-tool sub-rows
+ *   - Chevron immediately after the summary (left-aligned with the label)
  *
  * Expanded: renders children verbatim.
  */
@@ -151,24 +151,24 @@ export function EventGroup({
       >
         {showLiveTitle ? (
           <>
-            <span className="flex items-center gap-2 min-w-0 font-normal text-[var(--oh-muted)]">
+            <span className="flex min-w-0 items-center gap-2 font-normal text-[var(--oh-muted)]">
               <span className="truncate">
                 <PathInteractiveContext.Provider value={false}>
                   {latestTitle ?? countSummary}
                 </PathInteractiveContext.Provider>
               </span>
+              <Chevron className="h-4 w-4 flex-shrink-0" aria-hidden />
             </span>
-            <span className="flex items-center flex-shrink-0 gap-2 font-normal text-[var(--oh-muted)]">
+            <span className="flex flex-shrink-0 items-center gap-2 font-normal text-[var(--oh-muted)]">
               <span className="truncate">{countSummary}</span>
               <LoaderCircle
                 data-testid="spinner-icon"
                 className="h-4 w-4 inline animate-spin text-[var(--oh-muted)]"
               />
-              <Chevron className="h-4 w-4 flex-shrink-0" aria-hidden />
             </span>
           </>
         ) : (
-          <span className="flex items-center gap-2 min-w-0 font-normal text-[var(--oh-muted)] w-full">
+          <span className="flex min-w-0 items-center gap-2 font-normal text-[var(--oh-muted)]">
             <span
               className="truncate min-w-0"
               data-testid="event-group-summary"
@@ -196,7 +196,7 @@ export function EventGroup({
                   )}
                 </span>
               )}
-            <Chevron className="h-4 w-4 flex-shrink-0 ml-auto" aria-hidden />
+            <Chevron className="h-4 w-4 flex-shrink-0" aria-hidden />
           </span>
         )}
       </button>

@@ -711,8 +711,11 @@ app.whenReady().then(async () => {
     // re-probe end-to-end here so that if the user closes the splash race
     // window between processes binding, we still open the main window with
     // a live backend. Cheap (a single 200 response) when everything is up.
+    // Keep this on the same cold-start budget as startStack (10 min). A
+    // 60s second probe races uvx git/PyPI installs on first launch and
+    // leaves the splash stuck even after the agent-server is mid-boot.
     setBootPhase("Connecting to agent server…");
-    await waitForAgentServer(`${appOrigin}/server_info`, 60_000);
+    await waitForAgentServer(`${appOrigin}/server_info`, 10 * 60_000);
 
     setBootPhase("Ready.");
     createMainWindow(appOrigin);

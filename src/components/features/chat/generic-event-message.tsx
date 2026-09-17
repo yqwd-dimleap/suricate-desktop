@@ -143,13 +143,19 @@ export function GenericEventMessage({
   );
 
   const titleRow = (
-    <div className="flex items-center justify-between gap-2 font-normal text-[var(--oh-muted)]">
-      {titleContentWithTimestamp}
-      <div className="flex items-center shrink-0 gap-1">
-        {titleTrailing}
-        {success && <SuccessIndicator status={success} />}
+    <div className="flex w-full min-w-0 items-center gap-1.5 font-normal text-[var(--oh-muted)]">
+      {/* Title + chevron stay adjacent (Cursor-style compact row), matching
+          the file-edit summary. Trailing/success can still sit on the right. */}
+      <div className="flex min-w-0 items-center gap-1">
+        {titleContentWithTimestamp}
         {expandButton}
       </div>
+      {(titleTrailing || success) && (
+        <div className="ml-auto flex shrink-0 items-center gap-1">
+          {titleTrailing}
+          {success && <SuccessIndicator status={success} />}
+        </div>
+      )}
     </div>
   );
 

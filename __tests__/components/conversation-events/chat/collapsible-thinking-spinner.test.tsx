@@ -61,13 +61,13 @@ describe("CollapsibleThinking — thinking label", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("settles to a plain 'Thought' label when duration was never measured", () => {
+  it("settles to Thought briefly when duration was never measured", () => {
     renderWithProviders(<CollapsibleThinking content={REASONING} />);
 
     expect(screen.queryByTestId("collapsible-thinking-elapsed")).not.toBeInTheDocument();
-    expect(screen.getByText(thoughtLabel)).toBeInTheDocument();
+    expect(screen.getByText(briefLabel)).toBeInTheDocument();
     expect(screen.queryByText(thinkingLabel)).not.toBeInTheDocument();
-    expect(screen.queryByText(briefLabel)).not.toBeInTheDocument();
+    expect(screen.queryByText(thoughtLabel)).not.toBeInTheDocument();
     expect(screen.queryByText(durationLabel)).not.toBeInTheDocument();
   });
 
@@ -183,7 +183,7 @@ describe("ThoughtEventMessage — Cursor-style collapsible thought", () => {
     renderWithProviders(<ThoughtEventMessage event={event} />);
 
     expect(screen.getByTestId("collapsible-thinking")).toBeInTheDocument();
-    expect(screen.getByText(thoughtLabel)).toBeInTheDocument();
+    expect(screen.getByText(briefLabel)).toBeInTheDocument();
     // Collapsed by default — body text is not visible until expanded.
     expect(screen.queryByText("I need to run a command")).not.toBeInTheDocument();
   });
@@ -248,10 +248,10 @@ describe("EventMessage — live reasoning shows the shimmer label, settled thoug
     expect(screen.getByText(thinkingLabel)).toBeInTheDocument();
   });
 
-  it("settles to a static 'Thought' label once the reasoning lands on an action", () => {
+  it("settles to Thought briefly once the reasoning lands on an action", () => {
     // The agent is still running (executing the tool), but the reasoning is
-    // finalized on the action — it must read as a completed "Thought", not shimmer.
-    // Historical remounts without a live clock keep the plain Thought label.
+    // finalized on the action — it must read as settled, not shimmer.
+    // Historical remounts without a live clock use Thought briefly.
     vi.mocked(useAgentState).mockReturnValue({
       curAgentState: AgentState.RUNNING,
     });
@@ -267,6 +267,6 @@ describe("EventMessage — live reasoning shows the shimmer label, settled thoug
 
     expect(screen.getByTestId("collapsible-thinking")).toBeInTheDocument();
     expect(screen.queryByText(thinkingLabel)).not.toBeInTheDocument();
-    expect(screen.getByText(thoughtLabel)).toBeInTheDocument();
+    expect(screen.getByText(briefLabel)).toBeInTheDocument();
   });
 });
