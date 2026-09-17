@@ -232,6 +232,57 @@ describe("isGroupableEvent", () => {
     expect(isGroupableEvent(viewObservation)).toBe(true);
   });
 
+  it("groups ordinary mutating file-editor observations with their action", () => {
+    const action: ActionEvent<FileEditorAction> = {
+      id: "a1",
+      timestamp: new Date().toISOString(),
+      source: "agent",
+      thought: [],
+      thinking_blocks: [],
+      action: {
+        kind: "FileEditorAction",
+        command: "str_replace",
+        path: "/workspace/a.ts",
+        file_text: null,
+        old_str: "a",
+        new_str: "b",
+        insert_line: null,
+        view_range: null,
+      },
+      tool_name: "file_editor",
+      tool_call_id: "call_a1",
+      tool_call: {
+        id: "call_a1",
+        type: "function",
+        function: { name: "file_editor", arguments: "{}" },
+      },
+      llm_response_id: "r1",
+      security_risk: SecurityRisk.UNKNOWN,
+    };
+    const observation: ObservationEvent<FileEditorObservation> = {
+      id: "o1",
+      timestamp: new Date().toISOString(),
+      source: "environment",
+      tool_name: "file_editor",
+      tool_call_id: "call_a1",
+      action_id: "a1",
+      observation: {
+        kind: "FileEditorObservation",
+        content: [],
+        command: "str_replace",
+        path: "/workspace/a.ts",
+        old_content: "a",
+        new_content: "b",
+        prev_exist: true,
+        output: "",
+        error: null,
+      } as FileEditorObservation,
+    };
+
+    expect(isGroupableEvent(action)).toBe(true);
+    expect(isGroupableEvent(observation, action)).toBe(true);
+  });
+
   it("ungroups a markdown create observation when path comes from the action", () => {
     const action = makeMarkdownFileEditorAction("a1");
     const observation = makeMarkdownFileEditorObservation("o1", "a1");

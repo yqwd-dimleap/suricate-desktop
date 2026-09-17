@@ -6,37 +6,12 @@ import {
   isCanvasUIActionEvent,
 } from "#/types/agent-server/type-guards";
 import { isMarkdownFileEditorEvent } from "#/components/features/chat/tool-visualizers/primitives/markdown-file-preview";
-import type {
-  FileEditorAction,
-  StrReplaceEditorAction,
-} from "#/types/agent-server/core/base/action";
 import { getThoughtSourceAction } from "./event-thought-helpers";
 
 /** Minimum run-length before consecutive actions get folded into a single
  *  collapsible group. Even pairs are folded so the chat scroll stays compact
  *  when the agent fires off back-to-back tool calls. */
 export const EVENT_GROUP_MIN_SIZE = 2;
-
-const FILE_EDITOR_ACTION_KINDS = new Set([
-  "FileEditorAction",
-  "StrReplaceEditorAction",
-]);
-
-const isFileEditEvent = (
-  event: OpenHandsEvent,
-  correspondingAction?: ActionEvent,
-): boolean => {
-  if (isActionEvent(event)) {
-    return FILE_EDITOR_ACTION_KINDS.has(event.action.kind);
-  }
-  return Boolean(
-    correspondingAction &&
-    FILE_EDITOR_ACTION_KINDS.has(
-      (correspondingAction.action as FileEditorAction | StrReplaceEditorAction)
-        .kind,
-    ),
-  );
-};
 
 const isCanvasPreviewEvent = (event: OpenHandsEvent): boolean =>
   isCanvasUIActionEvent(event) && event.action.command === "show_preview";
@@ -47,16 +22,15 @@ const isCanvasPreviewEvent = (event: OpenHandsEvent): boolean =>
  *
  * Events that have their own dedicated rendering (FinishAction, ThinkAction,
  * HookExecution, AgentError, MessageEvent, PlanPreview, markdown file
- * artifacts, TaskTracker) are treated as group breakers.
+ * artifacts, TaskTracker, canvas preview) are treated as group breakers.
+ * Ordinary file edits are groupable so a finished thought can collapse to a
+ * Cursor-style activity summary ("Editing N files, …").
  */
 export const isGroupableEvent = (
   event: OpenHandsEvent,
   correspondingAction?: ActionEvent,
 ): boolean => {
-  if (
-    isCanvasPreviewEvent(event) ||
-    isFileEditEvent(event, correspondingAction)
-  ) {
+  if (isCanvasPreviewEvent(event)) {
     return false;
   }
 

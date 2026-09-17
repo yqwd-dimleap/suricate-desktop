@@ -1,8 +1,6 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
-import { LoaderCircle } from "lucide-react";
-import ArrowDown from "#/icons/angle-down-solid.svg?react";
-import ArrowUp from "#/icons/angle-up-solid.svg?react";
+import { ChevronDown, ChevronRight, LoaderCircle } from "lucide-react";
 import { OpenHandsEvent, ActionEvent } from "#/types/agent-server/core";
 import {
   isActionEvent,
@@ -10,6 +8,10 @@ import {
 } from "#/types/agent-server/type-guards";
 import { I18nKey } from "#/i18n/declaration";
 import { getEventContent } from "../event-content-helpers/get-event-content";
+import {
+  hasEventGroupActivityParts,
+  summarizeEventGroupActivity,
+} from "../event-content-helpers/summarize-event-group-activity";
 import { IsInEventGroupContext } from "../../../features/chat/is-in-event-group-context";
 import { PathInteractiveContext } from "../../../features/chat/path-component";
 
@@ -27,8 +29,7 @@ interface EventGroupProps {
    * `true` once an event outside this group has been emitted after it, so the
    * group is no longer the "live" tail of the chat. While `false` (the
    * default), the group keeps showing the most recent action's title as its
-   * prominent summary, with the count of completed actions shown subtly on
-   * the right.
+   * prominent summary while still running.
    */
   isFinalized?: boolean;
   /**
@@ -44,22 +45,17 @@ interface EventGroupProps {
  * Collapsible container that wraps a run of consecutive agent action/observation
  * events into a single summary card.
  *
- * Collapsed, while the group is still the live tail of the chat
- * (`isFinalized=false`):
- *   - Left (prominent): the title of the most recent action/observation in
- *     the group — i.e. either the action currently in flight, or the latest
- *     completed step.
- *   - Right (subdued):  "{completed}/{total} actions completed" while at
- *     least one action is still pending (with a spinner), otherwise
- *     "{count} actions completed" followed by a success check.
+ * Collapsed while running (`isFinalized=false` and a pending action):
+ *   - Left: latest action title
+ *   - Right: progress count + spinner
  *
- * Collapsed, after the group has been "moved past" (`isFinalized=true`):
- *   - "{count} actions completed" is promoted to the prominent foreground
- *     style and the count is the only thing shown next to the chevron.
+ * Collapsed when idle (no pending action):
+ *   - Cursor-style activity summary when the group has files/searches/commands
+ *     ("Editing N files, explored M searches, ran K commands +X -Y")
+ *   - Otherwise the legacy "{count} actions completed" string
+ *   - Chevron on the right expands the per-tool sub-rows
  *
- * Expanded:
- *   - Renders the children verbatim, so each individual action/observation can
- *     still be expanded the way it was before grouping.
+ * Expanded: renders children verbatim.
  */
 export function EventGroup({
   events,
@@ -83,18 +79,11 @@ export function EventGroup({
     return null;
   }
 
-  // Each ObservationEvent in the group is a completed action. An ActionEvent
-  // that's still here (i.e. not yet replaced by its observation in the UI
-  // events array) is an action currently in flight.
   const pendingAction = events.find((e): e is ActionEvent => isActionEvent(e));
   const completedCount = events.filter(isObservationEvent).length;
   const totalCount = events.length;
   const isRunning = !!pendingAction;
 
-  // Title of the most recent groupable event. While running this is the
-  // pending action; otherwise it's the latest observation, with its
-  // originating action looked up so the title can be the action-style summary
-  // ("Editing path/to/file") instead of the observation default.
   const latestEvent = events[events.length - 1];
   let latestTitle: React.ReactNode = null;
   if (latestEvent) {
@@ -110,14 +99,39 @@ export function EventGroup({
     }
   }
 
+  const activity = summarizeEventGroupActivity(events);
+  const useActivitySummary = !isRunning && hasEventGroupActivityParts(activity);
+
+  const activityParts: string[] = [];
+  if (useActivitySummary) {
+    if (activity.files > 0) {
+      activityParts.push(
+        t(I18nKey.EVENT_GROUP$SUMMARY_FILES, { count: activity.files }),
+      );
+    }
+    if (activity.searches > 0) {
+      activityParts.push(
+        t(I18nKey.EVENT_GROUP$SUMMARY_SEARCHES, { count: activity.searches }),
+      );
+    }
+    if (activity.commands > 0) {
+      activityParts.push(
+        t(I18nKey.EVENT_GROUP$SUMMARY_COMMANDS, { count: activity.commands }),
+      );
+    }
+  }
+
   const countSummary = isRunning
     ? t(I18nKey.EVENT_GROUP$ACTIONS_PROGRESS, {
         completed: completedCount,
         total: totalCount,
       })
-    : t(I18nKey.EVENT_GROUP$ACTIONS_COMPLETED, { count: totalCount });
+    : useActivitySummary
+      ? activityParts.join(", ")
+      : t(I18nKey.EVENT_GROUP$ACTIONS_COMPLETED, { count: totalCount });
 
-  const Chevron = expanded ? ArrowUp : ArrowDown;
+  const Chevron = expanded ? ChevronDown : ChevronRight;
+  const showLiveTitle = isRunning && !isFinalized;
 
   return (
     <div className="my-1 w-full py-1 text-sm" data-testid="event-group">
@@ -135,31 +149,55 @@ export function EventGroup({
         data-testid="event-group-toggle"
         className="w-full flex items-center justify-between gap-2 text-left cursor-pointer"
       >
-        {isFinalized ? (
-          <span className="flex items-center gap-2 min-w-0 font-normal text-[var(--oh-muted)]">
-            <Chevron className="h-4 w-4 fill-[var(--oh-muted)] flex-shrink-0" />
-            <span className="truncate">{countSummary}</span>
-          </span>
-        ) : (
+        {showLiveTitle ? (
           <>
             <span className="flex items-center gap-2 min-w-0 font-normal text-[var(--oh-muted)]">
-              <Chevron className="h-4 w-4 fill-[var(--oh-muted)] flex-shrink-0" />
               <span className="truncate">
                 <PathInteractiveContext.Provider value={false}>
                   {latestTitle ?? countSummary}
                 </PathInteractiveContext.Provider>
               </span>
             </span>
-            <span className="flex items-center flex-shrink-0 font-normal text-[var(--oh-muted)]">
+            <span className="flex items-center flex-shrink-0 gap-2 font-normal text-[var(--oh-muted)]">
               <span className="truncate">{countSummary}</span>
-              {isRunning ? (
-                <LoaderCircle
-                  data-testid="spinner-icon"
-                  className="h-4 w-4 ml-2 inline animate-spin text-[var(--oh-muted)]"
-                />
-              ) : null}
+              <LoaderCircle
+                data-testid="spinner-icon"
+                className="h-4 w-4 inline animate-spin text-[var(--oh-muted)]"
+              />
+              <Chevron className="h-4 w-4 flex-shrink-0" aria-hidden />
             </span>
           </>
+        ) : (
+          <span className="flex items-center gap-2 min-w-0 font-normal text-[var(--oh-muted)] w-full">
+            <span
+              className="truncate min-w-0"
+              data-testid="event-group-summary"
+            >
+              {countSummary}
+            </span>
+            {useActivitySummary &&
+              (activity.additions > 0 || activity.deletions > 0) && (
+                <span
+                  className="shrink-0 font-mono text-xs tabular-nums"
+                  data-testid="event-group-diff-stats"
+                >
+                  {activity.additions > 0 && (
+                    <span className="text-[var(--oh-status-success)]">
+                      {`+${activity.additions}`}
+                    </span>
+                  )}
+                  {activity.additions > 0 && activity.deletions > 0
+                    ? " "
+                    : null}
+                  {activity.deletions > 0 && (
+                    <span className="text-[var(--oh-status-error)]">
+                      {`-${activity.deletions}`}
+                    </span>
+                  )}
+                </span>
+              )}
+            <Chevron className="h-4 w-4 flex-shrink-0 ml-auto" aria-hidden />
+          </span>
         )}
       </button>
 

@@ -88,7 +88,8 @@ describe("fileEditorVisualizer", () => {
     expect(container).toHaveTextContent("const x = 1;");
   });
 
-  it("renders a Cursor-style review card for an edit observation", () => {
+  it("renders a Cursor-style review card for an edit observation", async () => {
+    const user = userEvent.setup();
     renderVisualizer(
       <Body
         observation={fileEditorObservation({
@@ -100,6 +101,9 @@ describe("fileEditorVisualizer", () => {
       />,
     );
     expect(screen.getByTestId("file-editor-review-card")).toBeInTheDocument();
+    expect(screen.getByTestId("file-editor-review-label")).toHaveTextContent(
+      "FILE_EDITOR$EDITED",
+    );
     expect(screen.getByTestId("file-editor-review-filename")).toHaveTextContent(
       "app.ts",
     );
@@ -111,8 +115,35 @@ describe("fileEditorVisualizer", () => {
     );
     expect(screen.queryByTestId("file-path-chip")).not.toBeInTheDocument();
     expect(screen.queryByTestId("open-in-changes")).not.toBeInTheDocument();
+    // Collapsed by default — code only appears after expanding the chevron.
+    expect(screen.queryByTestId("diff-view")).not.toBeInTheDocument();
+
+    await user.click(screen.getByTestId("file-editor-review-expand"));
+
     expect(screen.getByTestId("diff-view")).toHaveTextContent("OLD");
     expect(screen.getByTestId("diff-view")).toHaveTextContent("NEW");
+  });
+
+  it("opens the file from the filename without expanding the diff", async () => {
+    const user = userEvent.setup();
+    renderVisualizer(
+      <Body
+        observation={fileEditorObservation({
+          command: "str_replace",
+          path: "/workspace/app.ts",
+          old_content: "a",
+          new_content: "b",
+        })}
+      />,
+    );
+
+    await user.click(screen.getByTestId("file-editor-review-filename"));
+
+    expect(screen.queryByTestId("diff-view")).not.toBeInTheDocument();
+    expect(useFilesTabStore.getState()).toMatchObject({
+      selectedPath: "app.ts",
+      selectedConversationId: "test-conversation-id",
+    });
   });
 
   it("offers Keep and Revert on mutating edit observations", async () => {
@@ -165,7 +196,8 @@ describe("fileEditorVisualizer", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("renders a diff when clearing a file (new_content is an empty string)", () => {
+  it("renders a diff when clearing a file (new_content is an empty string)", async () => {
+    const user = userEvent.setup();
     renderVisualizer(
       <Body
         observation={fileEditorObservation({
@@ -175,12 +207,14 @@ describe("fileEditorVisualizer", () => {
         })}
       />,
     );
+    await user.click(screen.getByTestId("file-editor-review-expand"));
     // The empty `new_content` must not short-circuit the diff to the fallback.
     expect(screen.getByTestId("diff-view")).toHaveTextContent("keep");
     expect(screen.getByTestId("diff-view")).toHaveTextContent("remove me");
   });
 
-  it("renders a diff when inserting into an empty file (old_content is an empty string)", () => {
+  it("renders a diff when inserting into an empty file (old_content is an empty string)", async () => {
+    const user = userEvent.setup();
     renderVisualizer(
       <Body
         observation={fileEditorObservation({
@@ -190,11 +224,13 @@ describe("fileEditorVisualizer", () => {
         })}
       />,
     );
+    await user.click(screen.getByTestId("file-editor-review-expand"));
     expect(screen.getByTestId("diff-view")).toHaveTextContent("first line");
     expect(screen.getByTestId("diff-view")).toHaveTextContent("second line");
   });
 
-  it("renders the inserted text for an in-flight insert action (no old_str)", () => {
+  it("renders the inserted text for an in-flight insert action (no old_str)", async () => {
+    const user = userEvent.setup();
     renderVisualizer(
       <Body
         action={fileEditorAction({
@@ -209,13 +245,18 @@ describe("fileEditorVisualizer", () => {
     expect(screen.getByTestId("file-editor-review-filename")).toHaveTextContent(
       "app.ts",
     );
+    expect(screen.getByTestId("file-editor-review-label")).toHaveTextContent(
+      "FILE_EDITOR$EDITING",
+    );
+    await user.click(screen.getByTestId("file-editor-review-expand"));
     expect(screen.getByTestId("diff-view")).toHaveTextContent("inserted line");
     expect(
       screen.queryByTestId("file-editor-keep-button"),
     ).not.toBeInTheDocument();
   });
 
-  it("renders a diff for an in-flight str_replace action", () => {
+  it("renders a diff for an in-flight str_replace action", async () => {
+    const user = userEvent.setup();
     renderVisualizer(
       <Body
         action={fileEditorAction({
@@ -226,6 +267,7 @@ describe("fileEditorVisualizer", () => {
         })}
       />,
     );
+    await user.click(screen.getByTestId("file-editor-review-expand"));
     expect(screen.getByTestId("diff-view")).toHaveTextContent("OLD");
     expect(screen.getByTestId("diff-view")).toHaveTextContent("NEW");
   });
@@ -384,8 +426,9 @@ describe("fileEditorVisualizer", () => {
     });
   });
 
-  it("keeps non-markdown creates as a full code block", () => {
-    const { container } = renderVisualizer(
+  it("keeps non-markdown creates as a review card (not markdown preview)", async () => {
+    const user = userEvent.setup();
+    renderVisualizer(
       <Body
         observation={fileEditorObservation({
           command: "create",
@@ -398,7 +441,9 @@ describe("fileEditorVisualizer", () => {
     expect(
       screen.queryByTestId("markdown-file-preview"),
     ).not.toBeInTheDocument();
-    expect(container).toHaveTextContent("const x = 1;");
+    expect(screen.getByTestId("file-editor-review-card")).toBeInTheDocument();
+    await user.click(screen.getByTestId("file-editor-review-expand"));
+    expect(screen.getByTestId("diff-view")).toHaveTextContent("const x = 1;");
   });
 
   it("shows an in-flight markdown create preview without a View affordance", () => {

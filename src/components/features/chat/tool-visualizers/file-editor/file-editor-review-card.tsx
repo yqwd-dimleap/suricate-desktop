@@ -1,5 +1,6 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
+import { ChevronDown, ChevronRight } from "lucide-react";
 import type { GitChangeStatus } from "#/api/open-hands.types";
 import { ConfirmationModal } from "#/components/shared/modals/confirmation-modal";
 import { useOptionalConversationId } from "#/hooks/use-conversation-id";
@@ -34,9 +35,9 @@ export interface FileEditorReviewCardProps {
 }
 
 /**
- * Cursor-style file edit card: filename + +/- stats header, optional Keep /
- * Revert, and a line-numbered unified diff. Replaces the path pill + "Open in
- * Changes" stack for mutating file-editor observations.
+ * Cursor-style file edit row: collapsed summary by default
+ * ("Edited filename +N -M >"), left click jumps to the file, right chevron
+ * expands the unified diff. Keep/Revert stay on the summary row when offered.
  */
 export function FileEditorReviewCard({
   path,
@@ -55,6 +56,8 @@ export function FileEditorReviewCard({
   );
   const [kept, setKept] = React.useState(false);
   const [isRevertConfirmOpen, setIsRevertConfirmOpen] = React.useState(false);
+  const [expanded, setExpanded] = React.useState(false);
+  const expandId = React.useId();
 
   const stats = computeDiffStats(oldText, newText);
   const reveal = computeDiffRevealRange(oldText, newText);
@@ -63,6 +66,9 @@ export function FileEditorReviewCard({
   const workingDir = conversation?.workspace?.working_dir;
   const gitPath = toFilesTabPath(path, workingDir) || path;
   const status: GitChangeStatus = prevExist ? "M" : "U";
+  const labelKey = showReviewActions
+    ? I18nKey.FILE_EDITOR$EDITED
+    : I18nKey.FILE_EDITOR$EDITING;
 
   const markReviewed = React.useCallback(() => {
     clearStickyReveal(gitPath);
@@ -74,7 +80,8 @@ export function FileEditorReviewCard({
     markReviewed();
   }, [gitPath, markReviewed, reviewActions]);
 
-  const openFile = () => {
+  const openFile = (event: React.MouseEvent) => {
+    event.stopPropagation();
     if (conversationId) {
       openWorkspaceFile(path, conversationId, {
         reveal: reveal ?? undefined,
@@ -82,15 +89,20 @@ export function FileEditorReviewCard({
     }
   };
 
+  const Chevron = expanded ? ChevronDown : ChevronRight;
+
   return (
-    <div
-      className="overflow-hidden rounded-lg border border-[var(--oh-border)] bg-[var(--oh-surface)]"
-      data-testid="file-editor-review-card"
-    >
-      <div className="flex items-center gap-2 border-b border-[var(--oh-border)] px-3 py-2">
+    <div className="w-full text-sm" data-testid="file-editor-review-card">
+      <div className="flex items-center gap-2 py-0.5">
+        <span
+          className="shrink-0 text-[var(--oh-muted)]"
+          data-testid="file-editor-review-label"
+        >
+          {t(labelKey)}
+        </span>
         <button
           type="button"
-          className="min-w-0 truncate font-mono text-xs text-[var(--oh-foreground)] hover:underline"
+          className="min-w-0 truncate font-mono text-xs text-[var(--oh-foreground)] underline decoration-[var(--oh-muted)] underline-offset-2 hover:decoration-[var(--oh-foreground)]"
           title={path}
           onClick={openFile}
           data-testid="file-editor-review-filename"
@@ -134,14 +146,36 @@ export function FileEditorReviewCard({
               </button>
             </>
           )}
+          <button
+            type="button"
+            id={expandId}
+            data-testid="file-editor-review-expand"
+            className="rounded p-0.5 text-[var(--oh-muted)] hover:bg-[var(--oh-interactive-hover)] hover:text-[var(--oh-foreground)]"
+            aria-expanded={expanded}
+            aria-label={
+              expanded ? t(I18nKey.BUTTON$COLLAPSE) : t(I18nKey.BUTTON$EXPAND)
+            }
+            onClick={() => setExpanded((prev) => !prev)}
+          >
+            <Chevron className="h-4 w-4" aria-hidden />
+          </button>
         </div>
       </div>
-      <DiffView
-        oldText={oldText}
-        newText={newText}
-        language={language}
-        embedded
-      />
+
+      {expanded && (
+        <div
+          role="region"
+          aria-labelledby={expandId}
+          className="mt-1 overflow-hidden rounded-lg border border-[var(--oh-border)] bg-[var(--oh-surface)]"
+        >
+          <DiffView
+            oldText={oldText}
+            newText={newText}
+            language={language}
+            embedded
+          />
+        </div>
+      )}
 
       {isRevertConfirmOpen && (
         <ConfirmationModal

@@ -77,7 +77,7 @@ describe("EventGroup", () => {
     expect(container).toBeEmptyDOMElement();
   });
 
-  it("renders a 'completed' summary when all events are observations", () => {
+  it("renders a Cursor-style activity summary when all events are observations", () => {
     const events = [
       makeBashObservation("o1", "a1", "ls"),
       makeBashObservation("o2", "a2", "pwd"),
@@ -90,9 +90,9 @@ describe("EventGroup", () => {
       </EventGroup>,
     );
 
-    expect(
-      screen.getByText("EVENT_GROUP$ACTIONS_COMPLETED"),
-    ).toBeInTheDocument();
+    expect(screen.getByTestId("event-group-summary")).toHaveTextContent(
+      "EVENT_GROUP$SUMMARY_COMMANDS",
+    );
     // Children should not be visible in the collapsed state.
     expect(screen.queryByTestId("child")).not.toBeInTheDocument();
   });
@@ -139,10 +139,8 @@ describe("EventGroup", () => {
     expect(screen.getByText(/ACTION_MESSAGE\$RUN/)).toBeInTheDocument();
   });
 
-  it("keeps showing the latest completed action's title while the group is still the live tail", () => {
-    // All observations -> nothing in flight, but the group has not been
-    // "moved past" yet, so we expect the latest observation's title to keep
-    // showing as the prominent summary alongside the completed count.
+  it("shows an activity summary instead of the latest title once idle", () => {
+    // All observations -> nothing in flight: Cursor-style activity rollup.
     const events = [
       makeBashObservation("o1", "a1", "ls"),
       makeBashObservation("o2", "a2", "pwd"),
@@ -155,15 +153,15 @@ describe("EventGroup", () => {
       </EventGroup>,
     );
 
-    // Latest observation's title is still in the summary line.
-    expect(screen.getByText(/OBSERVATION_MESSAGE\$RUN/)).toBeInTheDocument();
-    // ...next to the completed count.
+    expect(screen.getByTestId("event-group-summary")).toHaveTextContent(
+      "EVENT_GROUP$SUMMARY_COMMANDS",
+    );
     expect(
-      screen.getByText("EVENT_GROUP$ACTIONS_COMPLETED"),
-    ).toBeInTheDocument();
+      screen.queryByText(/OBSERVATION_MESSAGE\$RUN/),
+    ).not.toBeInTheDocument();
   });
 
-  it("hides the latest action title once the group is finalized", () => {
+  it("keeps the activity summary once the group is finalized", () => {
     const events = [
       makeBashObservation("o1", "a1", "ls"),
       makeBashObservation("o2", "a2", "pwd"),
@@ -176,15 +174,75 @@ describe("EventGroup", () => {
       </EventGroup>,
     );
 
-    expect(
-      screen.getByText("EVENT_GROUP$ACTIONS_COMPLETED"),
-    ).toBeInTheDocument();
-    // Once moved past, we collapse to just the count — the per-action title
-    // and the success check both go away.
+    expect(screen.getByTestId("event-group-summary")).toHaveTextContent(
+      "EVENT_GROUP$SUMMARY_COMMANDS",
+    );
     expect(
       screen.queryByText(/OBSERVATION_MESSAGE\$RUN/),
     ).not.toBeInTheDocument();
     expect(screen.queryByTestId("status-icon")).not.toBeInTheDocument();
+  });
+
+  it("joins file/search/command parts and shows aggregate +/-", () => {
+    const fileObs: ObservationEvent = {
+      id: "o-file",
+      timestamp: new Date().toISOString(),
+      source: "environment",
+      tool_name: "file_editor",
+      tool_call_id: "call_a-file",
+      action_id: "a-file",
+      observation: {
+        kind: "FileEditorObservation",
+        content: [],
+        command: "str_replace",
+        path: "/workspace/a.ts",
+        old_content: "old\n",
+        new_content: "new\n",
+        prev_exist: true,
+        output: "",
+        error: null,
+      },
+    };
+    const grepObs: ObservationEvent = {
+      id: "o-grep",
+      timestamp: new Date().toISOString(),
+      source: "environment",
+      tool_name: "grep",
+      tool_call_id: "call_a-grep",
+      action_id: "a-grep",
+      observation: {
+        kind: "GrepObservation",
+        content: [],
+        pattern: "foo",
+        search_path: ".",
+        matches: ["a.ts"],
+        include_pattern: null,
+        truncated: false,
+        is_error: false,
+      },
+    };
+    const events = [
+      fileObs,
+      grepObs,
+      makeBashObservation("o-bash", "a-bash", "ls"),
+    ];
+
+    renderWithProviders(
+      <EventGroup events={events} isFinalized>
+        <div>child</div>
+      </EventGroup>,
+    );
+
+    const summary = screen.getByTestId("event-group-summary");
+    expect(summary).toHaveTextContent("EVENT_GROUP$SUMMARY_FILES");
+    expect(summary).toHaveTextContent("EVENT_GROUP$SUMMARY_SEARCHES");
+    expect(summary).toHaveTextContent("EVENT_GROUP$SUMMARY_COMMANDS");
+    expect(screen.getByTestId("event-group-diff-stats")).toHaveTextContent(
+      "+1",
+    );
+    expect(screen.getByTestId("event-group-diff-stats")).toHaveTextContent(
+      "-1",
+    );
   });
 
   it("shows a spinner while running and no status icon when done", () => {

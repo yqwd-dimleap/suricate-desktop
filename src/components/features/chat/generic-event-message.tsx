@@ -1,7 +1,6 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
-import ArrowDown from "#/icons/angle-down-solid.svg?react";
-import ArrowUp from "#/icons/angle-up-solid.svg?react";
+import { ChevronDown, ChevronRight } from "lucide-react";
 import { SuccessIndicator } from "./success-indicator";
 import { ObservationResultStatus } from "#/components/conversation-events/chat/event-content-helpers/get-observation-result";
 import { MarkdownRenderer } from "../markdown/markdown-renderer";
@@ -15,7 +14,11 @@ interface GenericEventMessageProps {
   details: string | React.ReactNode;
   success?: ObservationResultStatus;
   initiallyExpanded?: boolean;
-  /** Where to place the expand/collapse chevron relative to the title. */
+  /**
+   * Where to place the expand chevron. `"after"` (default) pins it to the
+   * right edge of the row (Cursor-style). `"before"` keeps it left of the
+   * title for legacy surfaces like BTW / goal status.
+   */
   chevronPosition?: "before" | "after";
   /** Extra content rendered at the end of the title row (right side). */
   titleTrailing?: React.ReactNode;
@@ -53,16 +56,32 @@ export function GenericEventMessage({
     }
   };
 
-  const ChevronIcon = showDetails ? ArrowUp : ArrowDown;
+  const ChevronIcon = showDetails ? ChevronDown : ChevronRight;
   const chevron = details ? (
     <ChevronIcon
       aria-hidden
       className={cn(
-        "inline h-4 w-4 fill-[var(--oh-muted)]",
-        chevronPosition === "after" ? "ml-2" : "mr-2",
+        "inline h-4 w-4 text-[var(--oh-muted)]",
+        chevronPosition === "before" && "mr-2",
       )}
     />
   ) : null;
+
+  const expandButton =
+    details && chevronPosition === "after" ? (
+      <button
+        type="button"
+        data-testid="generic-event-message-expand"
+        className="rounded p-0.5 text-[var(--oh-muted)] hover:bg-[var(--oh-interactive-hover)] hover:text-[var(--oh-foreground)]"
+        aria-expanded={showDetails}
+        aria-label={
+          showDetails ? t(I18nKey.BUTTON$COLLAPSE) : t(I18nKey.BUTTON$EXPAND)
+        }
+        onClick={toggleDetails}
+      >
+        {chevron}
+      </button>
+    ) : null;
 
   const titleContent = (
     <div
@@ -77,7 +96,10 @@ export function GenericEventMessage({
             : t(I18nKey.BUTTON$EXPAND)
           : undefined
       }
-      className={cn("flex items-center", details && "cursor-pointer text-left")}
+      className={cn(
+        "flex items-center min-w-0",
+        details && "cursor-pointer text-left",
+      )}
       onClick={details ? toggleDetails : undefined}
       onKeyDown={
         details
@@ -104,8 +126,7 @@ export function GenericEventMessage({
           fragments (e.g. "Editing <path>...</path>") is preserved by
           normal inline flow instead of being collapsed between
           anonymous flex items. */}
-      <span>{title}</span>
-      {chevronPosition === "after" && chevron}
+      <span className="truncate">{title}</span>
     </div>
   );
 
@@ -122,11 +143,12 @@ export function GenericEventMessage({
   );
 
   const titleRow = (
-    <div className="flex items-center justify-between font-normal text-[var(--oh-muted)]">
+    <div className="flex items-center justify-between gap-2 font-normal text-[var(--oh-muted)]">
       {titleContentWithTimestamp}
-      <div className="flex items-center">
+      <div className="flex items-center shrink-0 gap-1">
         {titleTrailing}
         {success && <SuccessIndicator status={success} />}
+        {expandButton}
       </div>
     </div>
   );

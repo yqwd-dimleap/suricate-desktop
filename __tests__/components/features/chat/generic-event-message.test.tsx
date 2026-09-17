@@ -23,4 +23,24 @@ describe("GenericEventMessage", () => {
     await user.click(screen.getByText("Read inject-bridge.js"));
     expect(screen.queryByText("file contents here")).not.toBeInTheDocument();
   });
+
+  it("toggles details from the trailing chevron without requiring the title", async () => {
+    const user = userEvent.setup();
+
+    renderWithProviders(
+      <GenericEventMessage title="Ran ls" details="output lines" />,
+    );
+
+    expect(screen.queryByText("output lines")).not.toBeInTheDocument();
+    expect(
+      screen.getByTestId("generic-event-message-expand"),
+    ).toHaveAttribute("aria-expanded", "false");
+
+    await user.click(screen.getByTestId("generic-event-message-expand"));
+
+    expect(screen.getByText("output lines")).toBeInTheDocument();
+    expect(
+      screen.getByTestId("generic-event-message-expand"),
+    ).toHaveAttribute("aria-expanded", "true");
+  });
 });
