@@ -1,13 +1,19 @@
 import React from "react";
-import { Editor } from "@monaco-editor/react";
+import { Editor, Monaco } from "@monaco-editor/react";
 import type { editor as MonacoEditor } from "monaco-editor";
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
 import { getLanguageFromPath } from "#/utils/get-language-from-path";
 import { useSaveWorkspaceTextFile } from "#/hooks/mutation/use-save-workspace-text-file";
+import { useOptionalConversationId } from "#/hooks/use-conversation-id";
 import { HunkReviewOverlay } from "./hunk-review-overlay";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
 import type { PendingFileReveal } from "#/stores/files-tab-store";
+import {
+  hasDocumentConflict,
+  isDocumentDirty,
+  useWorkspaceDocumentStore,
+} from "#/stores/workspace-document-store";
 
 interface EditableSourceViewProps {
   path: string;
@@ -26,8 +32,10 @@ const EDITOR_OPTIONS: MonacoEditor.IStandaloneEditorConstructionOptions = {
 };
 
 /**
- * Editable Monaco view for workspace text files. Tracks dirty state and
- * saves via RemoteWorkspace upload (Cmd/Ctrl+S or Save button).
+ * Editable Monaco view for workspace text files. Drafts live in
+ * `useWorkspaceDocumentStore` so switching Files tabs / files does not
+ * drop unsaved work, and agent disk updates become an explicit conflict
+ * instead of silently overwriting the buffer.
  */
 export function EditableSourceView({
   path,
@@ -35,17 +43,78 @@ export function EditableSourceView({
   reveal,
 }: EditableSourceViewProps) {
   const { t } = useTranslation("openhands");
+  const { conversationId } = useOptionalConversationId();
   const saveMutation = useSaveWorkspaceTextFile();
-  const [draft, setDraft] = React.useState(text);
-  const [dirty, setDirty] = React.useState(false);
   const editorRef = React.useRef<MonacoEditor.IStandaloneCodeEditor | null>(
     null,
   );
+  const saveRef = React.useRef<() => void>(() => undefined);
+  const [localDraft, setLocalDraft] = React.useState(text);
 
-  React.useEffect(() => {
-    setDraft(text);
-    setDirty(false);
-  }, [path, text]);
+  const document = useWorkspaceDocumentStore((state) =>
+    conversationId ? state.byConversation[conversationId]?.[path] : undefined,
+  );
+
+  // Layout effect so the store row exists before the first keystroke —
+  // `setDraft` no-ops when the path is missing, and a paint-time race
+  // would drop early edits.
+  React.useLayoutEffect(() => {
+    if (!conversationId) {
+      setLocalDraft(text);
+      return;
+    }
+    useWorkspaceDocumentStore
+      .getState()
+      .applyRemote(conversationId, path, text);
+  }, [conversationId, path, text]);
+
+  const draft = conversationId ? (document?.draft ?? text) : localDraft;
+  const dirty = conversationId
+    ? isDocumentDirty(document)
+    : localDraft !== text;
+  const conflict = hasDocumentConflict(document);
+
+  const handleSave = React.useCallback(() => {
+    if (!conversationId || saveMutation.isPending) {
+      return;
+    }
+    const current = useWorkspaceDocumentStore
+      .getState()
+      .getDocument(conversationId, path);
+    if (!current || current.draft === current.baseline) {
+      return;
+    }
+    if (current.incoming !== null) {
+      displayErrorToast(t(I18nKey.FILES$RESOLVE_CONFLICT_FIRST));
+      return;
+    }
+    saveMutation.mutate(
+      { relativePath: path, content: current.draft },
+      {
+        onError: (error) => {
+          displayErrorToast(
+            error instanceof Error
+              ? error.message
+              : t(I18nKey.FILES$SAVE_ERROR),
+          );
+        },
+      },
+    );
+  }, [conversationId, path, saveMutation, t]);
+
+  saveRef.current = handleSave;
+
+  const handleChange = React.useCallback(
+    (value: string | undefined) => {
+      const next = value ?? "";
+      if (!conversationId) {
+        setLocalDraft(next);
+        return;
+      }
+      useWorkspaceDocumentStore.getState().setDraft(conversationId, path, next);
+    },
+    [conversationId, path],
+  );
 
   React.useEffect(() => {
     const editor = editorRef.current;
@@ -58,43 +127,51 @@ export function EditableSourceView({
     return undefined;
   }, [path, reveal]);
 
-  const handleSave = React.useCallback(() => {
-    if (!dirty || saveMutation.isPending) {
+  const handleKeepMine = React.useCallback(() => {
+    if (!conversationId) {
       return;
     }
-    saveMutation.mutate(
-      { relativePath: path, content: draft },
-      {
-        onSuccess: () => {
-          setDirty(false);
-        },
-        onError: (error) => {
-          displayErrorToast(
-            error instanceof Error
-              ? error.message
-              : t(I18nKey.FILES$SAVE_ERROR),
-          );
-        },
-      },
-    );
-  }, [dirty, draft, path, saveMutation, t]);
+    useWorkspaceDocumentStore.getState().keepMine(conversationId, path);
+  }, [conversationId, path]);
 
-  React.useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") {
-        event.preventDefault();
-        handleSave();
-      }
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [handleSave]);
+  const handleUseIncoming = React.useCallback(() => {
+    if (!conversationId) {
+      return;
+    }
+    useWorkspaceDocumentStore.getState().useIncoming(conversationId, path);
+  }, [conversationId, path]);
 
   return (
     <div
       className="flex h-full w-full flex-col"
       data-testid="editable-source-view"
     >
+      {conflict && (
+        <div
+          className="flex shrink-0 flex-wrap items-center gap-2 border-b border-[var(--oh-border)] px-3 py-1.5"
+          data-testid="editable-source-conflict"
+        >
+          <span className="text-xs text-[var(--oh-muted)]">
+            {t(I18nKey.FILES$CONFLICT_BANNER)}
+          </span>
+          <button
+            type="button"
+            data-testid="editable-source-keep-mine"
+            className="rounded px-2 py-0.5 text-xs text-[var(--oh-text-secondary)] hover:bg-[var(--oh-interactive-hover)] hover:text-[var(--oh-foreground)]"
+            onClick={handleKeepMine}
+          >
+            {t(I18nKey.FILES$KEEP_MINE)}
+          </button>
+          <button
+            type="button"
+            data-testid="editable-source-use-incoming"
+            className="rounded px-2 py-0.5 text-xs text-[var(--oh-text-secondary)] hover:bg-[var(--oh-interactive-hover)] hover:text-[var(--oh-foreground)]"
+            onClick={handleUseIncoming}
+          >
+            {t(I18nKey.FILES$USE_AGENT)}
+          </button>
+        </div>
+      )}
       <div className="flex shrink-0 items-center gap-2 border-b border-[var(--oh-border)] px-3 py-1.5">
         {dirty && (
           <span
@@ -108,7 +185,7 @@ export function EditableSourceView({
           type="button"
           data-testid="editable-source-save"
           className="ml-auto rounded px-2 py-0.5 text-xs text-[var(--oh-text-secondary)] hover:bg-[var(--oh-interactive-hover)] hover:text-[var(--oh-foreground)] disabled:opacity-50"
-          disabled={!dirty || saveMutation.isPending}
+          disabled={!dirty || conflict || saveMutation.isPending}
           onClick={handleSave}
         >
           {saveMutation.isPending
@@ -116,7 +193,7 @@ export function EditableSourceView({
             : t(I18nKey.FILES$SAVE)}
         </button>
       </div>
-      <HunkReviewOverlay path={path} dirty={dirty} />
+      <HunkReviewOverlay path={path} dirty={dirty || conflict} />
       <div className="min-h-0 flex-1">
         <Editor
           path={path}
@@ -124,14 +201,16 @@ export function EditableSourceView({
           theme="vs-dark"
           value={draft}
           options={EDITOR_OPTIONS}
-          onMount={(editor) => {
+          onMount={(editor, monaco: Monaco) => {
             editorRef.current = editor;
+            editor.addCommand(
+              monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS,
+              () => {
+                saveRef.current();
+              },
+            );
           }}
-          onChange={(value) => {
-            const next = value ?? "";
-            setDraft(next);
-            setDirty(next !== text);
-          }}
+          onChange={handleChange}
         />
       </div>
     </div>

@@ -5,6 +5,7 @@ import React from "react";
 
 import { useAgentReviewActions } from "#/hooks/mutation/use-agent-review-actions";
 import { useAgentReviewStore } from "#/stores/agent-review-store";
+import { useWorkspaceDocumentStore } from "#/stores/workspace-document-store";
 
 const saveMock = vi.fn();
 
@@ -39,6 +40,7 @@ describe("useAgentReviewActions", () => {
     saveMock.mockReset();
     saveMock.mockResolvedValue(undefined);
     useAgentReviewStore.getState().reset();
+    useWorkspaceDocumentStore.getState().reset();
     useAgentReviewStore.getState().openCheckpoint("conv-1", "msg-1");
     useAgentReviewStore.getState().ingestObservation({
       conversationId: "conv-1",

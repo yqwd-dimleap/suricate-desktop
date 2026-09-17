@@ -30,6 +30,18 @@ vi.mock("#/hooks/query/use-active-conversation", () => ({
   useActiveConversation: () => useActiveConversationMock(),
 }));
 
+vi.mock("#/hooks/query/use-unified-get-git-changes", () => ({
+  useUnifiedGetGitChanges: () => ({
+    data: [],
+    isSuccess: true,
+    isLoading: false,
+  }),
+}));
+
+vi.mock("@monaco-editor/react", () => ({
+  Editor: () => <div data-testid="monaco-editor" />,
+}));
+
 function renderTab(conversationId: string | null = null) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
@@ -274,7 +286,7 @@ describe("FilesTab", () => {
     expect(screen.getByText("bold").tagName.toLowerCase()).toBe("strong");
   });
 
-  it("shows highlighted source (not rich markdown) when toggled to plain on a .md", async () => {
+  it("shows editable source (not rich markdown) when toggled to plain on a .md", async () => {
     useWorkspaceFilesMock.mockReturnValue({
       data: ["README.md"],
       isLoading: false,
@@ -300,10 +312,9 @@ describe("FilesTab", () => {
       screen.getByTestId("files-tab-content-mode-toggle-option-plain"),
     );
 
-    const highlighted = await screen.findByTestId(
-      "file-content-viewer-highlighted",
-    );
-    expect(highlighted.getAttribute("data-language")).toBe("markdown");
+    expect(
+      await screen.findByTestId("editable-source-view"),
+    ).toBeInTheDocument();
     expect(
       screen.queryByRole("heading", { level: 1, name: "Hello" }),
     ).not.toBeInTheDocument();
@@ -336,7 +347,7 @@ describe("FilesTab", () => {
     expect(iframe).toHaveAttribute("sandbox", "allow-same-origin");
   });
 
-  it("switches between rich and plain content modes", async () => {
+  it("keeps the Monaco editor for source files in both rich and plain modes", async () => {
     useWorkspaceFilesMock.mockReturnValue({
       data: ["src/main.ts"],
       isLoading: false,
@@ -358,14 +369,17 @@ describe("FilesTab", () => {
     openFile("src/main.ts");
     renderTab();
 
+    expect(
+      await screen.findByTestId("editable-source-view"),
+    ).toBeInTheDocument();
+
     await user.click(
       screen.getByTestId("files-tab-content-mode-toggle-option-plain"),
     );
-    const highlighted = await screen.findByTestId(
-      "file-content-viewer-highlighted",
-    );
-    expect(highlighted).toBeInTheDocument();
-    expect(highlighted.getAttribute("data-language")).toBe("typescript");
+    expect(screen.getByTestId("editable-source-view")).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("file-content-viewer-highlighted"),
+    ).not.toBeInTheDocument();
   });
 
   it("shows refresh on the file quick-row", () => {

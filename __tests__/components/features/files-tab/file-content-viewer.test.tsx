@@ -44,18 +44,26 @@ vi.mock("#/api/runtime-service/agent-server-runtime-service", () => ({
   default: { downloadFile: vi.fn() },
 }));
 
+vi.mock("@monaco-editor/react", () => ({
+  Editor: () => <div data-testid="monaco-editor" />,
+}));
+
 const fetchMock = vi.fn();
 
 const BASE_URL =
   "https://agent.example.com/api/conversations/conv-1/workspace/";
 
-function renderViewer(path: string, viewMode: ViewMode = "rich") {
+function renderViewer(
+  path: string,
+  viewMode: ViewMode = "rich",
+  editable?: boolean,
+) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
   return render(
     <QueryClientProvider client={client}>
-      <FileContentViewer path={path} viewMode={viewMode} />
+      <FileContentViewer path={path} viewMode={viewMode} editable={editable} />
     </QueryClientProvider>,
   );
 }
@@ -121,4 +129,40 @@ describe("FileContentViewer", () => {
       ).toBeInTheDocument();
     },
   );
+
+  it.each(["rich", "plain"] as const)(
+    "uses a read-only highlighter instead of Monaco when editable is false in %s mode",
+    async (viewMode) => {
+      fetchMock.mockResolvedValue({
+        ok: true,
+        status: 200,
+        arrayBuffer: () =>
+          Promise.resolve(new TextEncoder().encode("const x = 1;\n").buffer),
+      });
+
+      renderViewer("app.ts", viewMode, false);
+
+      expect(
+        await screen.findByTestId("file-content-viewer-highlighted"),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByTestId("editable-source-view"),
+      ).not.toBeInTheDocument();
+    },
+  );
+
+  it("mounts Monaco for editable source files", async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      arrayBuffer: () =>
+        Promise.resolve(new TextEncoder().encode("const x = 1;\n").buffer),
+    });
+
+    renderViewer("app.ts", "rich", true);
+
+    expect(
+      await screen.findByTestId("editable-source-view"),
+    ).toBeInTheDocument();
+  });
 });

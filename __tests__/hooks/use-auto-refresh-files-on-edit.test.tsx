@@ -76,7 +76,7 @@ describe("useAutoRefreshFilesOnEdit", () => {
   });
 
   it.each(["ExecuteBashObservation", "TerminalObservation"])(
-    "refreshes only the git diff queries when a %s arrives",
+    "refreshes git and workspace file queries when a %s arrives, without iframe cache-bust",
     (kind) => {
       // Arrange
       const client = new QueryClient();
@@ -93,9 +93,9 @@ describe("useAutoRefreshFilesOnEdit", () => {
           .addEvent(makeObservationEvent("1", kind, "git commit -m 'done'"));
       });
 
-      // Assert — the diff and commit-list queries refresh, and nothing
-      // else does (workspace file queries on every shell command would
-      // churn the Files tab; per-commit queries are immutable).
+      // Assert — git queries refresh, and workspace file queries refresh so
+      // Monaco picks up `echo`/`sed` writes. The iframe cache-bust counter
+      // is deliberately not bumped (see the companion counter test).
       const invalidatedKeys = spy.mock.calls.map(
         (call) => (call[0] as { queryKey: unknown[] }).queryKey[0],
       );
@@ -103,7 +103,10 @@ describe("useAutoRefreshFilesOnEdit", () => {
         "file_changes",
         "file_diff",
         "git_commits",
+        "workspace-files",
+        "workspace-file-content",
       ]);
+      expect(useWorkspaceMutationCounter.getState().count).toBe(0);
     },
   );
 

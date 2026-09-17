@@ -11,11 +11,17 @@ import { useFilesTabStore } from "#/stores/files-tab-store";
 import { MarkdownRenderer } from "#/components/features/markdown/markdown-renderer";
 import { isMarkdownFilePath } from "#/utils/is-markdown-file-path";
 import { EditableSourceView } from "./editable-source-view";
+import { HighlightedSourceView } from "./highlighted-source-view";
 import type { ViewMode } from "./view-mode";
 
 interface FileContentViewerProps {
   path: string;
   viewMode: ViewMode;
+  /**
+   * When false, text files render a read-only highlighter instead of
+   * Monaco. Preview uses this so it does not mount a second editor.
+   */
+  editable?: boolean;
 }
 
 const HTML_LIKE_EXTS = new Set(["html", "htm", "svg"]);
@@ -68,7 +74,11 @@ function UnpreviewableFallback({ path }: { path: string }) {
  * load naturally. In `plain` mode we always show the raw bytes as text (or
  * a fallback message for binaries).
  */
-export function FileContentViewer({ path, viewMode }: FileContentViewerProps) {
+export function FileContentViewer({
+  path,
+  viewMode,
+  editable = true,
+}: FileContentViewerProps) {
   const { t } = useTranslation("openhands");
   const query = useWorkspaceFileContent(path);
   // Subscribe to the workspace mutation counter so the iframe / <img> src
@@ -121,6 +131,16 @@ export function FileContentViewer({ path, viewMode }: FileContentViewerProps) {
   // the markup behind the rich preview.
   if (viewMode === "plain") {
     if (kind === "text" && text !== null) {
+      if (!editable) {
+        return (
+          <HighlightedSourceView
+            path={path}
+            text={text}
+            mimeType={mimeType ?? undefined}
+            reveal={revealForPath}
+          />
+        );
+      }
       return (
         <EditableSourceView path={path} text={text} reveal={revealForPath} />
       );
@@ -216,9 +236,19 @@ export function FileContentViewer({ path, viewMode }: FileContentViewerProps) {
   }
 
   // Rich mode for actual source code (.ts, .py, .yaml, .css, …): there
-  // is no other "rich" rendering to fall back to, so the editable source
-  // view IS the rich view (same as plain mode for source files).
+  // is no other "rich" rendering to fall back to, so the source view IS
+  // the rich view. Files mounts Monaco; Preview stays read-only.
   if (kind === "text" && text !== null) {
+    if (!editable) {
+      return (
+        <HighlightedSourceView
+          path={path}
+          text={text}
+          mimeType={mimeType ?? undefined}
+          reveal={revealForPath}
+        />
+      );
+    }
     return (
       <EditableSourceView path={path} text={text} reveal={revealForPath} />
     );

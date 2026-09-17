@@ -5,6 +5,10 @@ import { useQueryClient } from "@tanstack/react-query";
 import { NoFileSelectedMessage } from "#/components/features/files-tab/no-file-selected-message";
 import { I18nKey } from "#/i18n/declaration";
 import { useFilesTabStore } from "#/stores/files-tab-store";
+import {
+  isDocumentDirty,
+  useWorkspaceDocumentStore,
+} from "#/stores/workspace-document-store";
 import { useWorkspaceFiles } from "#/hooks/query/use-workspace-files";
 import { useWorkspaceFileContent } from "#/hooks/query/use-workspace-file-content";
 import { useAutoRefreshFilesOnEdit } from "#/hooks/use-auto-refresh-files-on-edit";
@@ -100,12 +104,37 @@ function FilesTab() {
     selectedConversationId === conversationId ? storedSelectedPath : null;
   const conversationOpenPaths =
     selectedConversationId === conversationId ? openPaths : [];
+  const documents = useWorkspaceDocumentStore((state) =>
+    conversationId ? state.byConversation[conversationId] : undefined,
+  );
+  const dirtyPaths = useMemo(() => {
+    const next = new Set<string>();
+    if (!documents) {
+      return next;
+    }
+    for (const [docPath, doc] of Object.entries(documents)) {
+      if (isDocumentDirty(doc) || doc.incoming !== null) {
+        next.add(docPath);
+      }
+    }
+    return next;
+  }, [documents]);
 
   // Tag every selection with the active conversation so it can't leak into
   // the next one. Opening a path also appends it to the tab strip.
   const handleSelectFile = useCallback(
     (path: string) => setSelectedPath(path, conversationId),
     [conversationId, setSelectedPath],
+  );
+
+  const handleCloseFile = useCallback(
+    (path: string) => {
+      closeOpenPath(path);
+      if (conversationId) {
+        useWorkspaceDocumentStore.getState().closePath(conversationId, path);
+      }
+    },
+    [closeOpenPath, conversationId],
   );
 
   // Pre-fetch the selected file's content here too so the toolbar's
@@ -183,7 +212,8 @@ function FilesTab() {
             openPaths={conversationOpenPaths}
             selectedPath={selectedPath}
             onSelectFile={handleSelectFile}
-            onCloseFile={closeOpenPath}
+            onCloseFile={handleCloseFile}
+            dirtyPaths={dirtyPaths}
             isTreeVisible={isTreeVisible}
             onToggleTree={toggleTreeVisible}
             actions={quickRowActions}

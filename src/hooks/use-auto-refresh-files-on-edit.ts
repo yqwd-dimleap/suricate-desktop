@@ -55,13 +55,11 @@ function isBashObservation(event: OHEvent): boolean {
  * without requiring the user to click refresh manually.
  *
  * Bash observations also refresh the git-diff queries (`file_changes` /
- * `file_diff`) — a `git commit` or `git push` changes what the Diff view
- * should display, and shell commands can edit files too. They deliberately
- * do NOT touch the workspace file queries or the workspace mutation
- * counter: bumping the counter reloads canvas iframes, and doing that for
- * every shell command the agent runs would cause constant flicker.
- * Invalidation only refetches actively-mounted queries, so the cost is
- * limited to when the Files tab is open.
+ * `file_diff`) and the workspace file queries so Monaco picks up shell
+ * writes. They deliberately do NOT bump the workspace mutation counter:
+ * that counter reloads canvas iframes, and doing that for every shell
+ * command would cause constant flicker. Invalidation only refetches
+ * actively-mounted queries, so the cost is limited to when Files is open.
  *
  * Mount this hook inside any component that should drive auto-refresh —
  * the Files tab is the obvious caller. Multiple mounts are safe because
@@ -136,9 +134,16 @@ export function useAutoRefreshFilesOnEdit(): void {
     queryClient.invalidateQueries({ queryKey: ["file_diff"] });
     queryClient.invalidateQueries({ queryKey: ["git_commits"] });
 
-    if (hasNewFileEdits) {
+    if (hasNewFileEdits || hasNewBashCommands) {
+      // Shell edits (`echo`, `sed`, …) also change workspace files. Refresh
+      // the Files Monaco buffer without bumping the mutation counter —
+      // that counter cache-busts preview iframes, and doing it on every
+      // `ls` would flicker the Preview tab.
       queryClient.invalidateQueries({ queryKey: ["workspace-files"] });
       queryClient.invalidateQueries({ queryKey: ["workspace-file-content"] });
+    }
+
+    if (hasNewFileEdits) {
       // Force iframes / <img> tags pointing at the static workspace
       // fileserver to re-fetch. Without this they happily keep showing the
       // stale (browser-cached) bytes even after the agent has rewritten the

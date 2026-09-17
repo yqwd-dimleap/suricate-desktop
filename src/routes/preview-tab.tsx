@@ -42,7 +42,7 @@ function PreviewTab() {
         {path}
       </div>
       <div className="min-h-0 flex-1">
-        <FileContentViewer path={path} viewMode="rich" />
+        <FileContentViewer path={path} viewMode="rich" editable={false} />
       </div>
     </div>
   );

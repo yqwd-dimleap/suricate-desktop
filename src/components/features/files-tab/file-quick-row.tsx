@@ -9,6 +9,8 @@ interface FileQuickRowProps {
   /** Open file tabs only (paths the user or agent has opened). */
   openPaths: string[];
   selectedPath: string | null;
+  /** Paths with unsaved editor drafts (dot on the tab). */
+  dirtyPaths?: ReadonlySet<string>;
   onSelectFile: (path: string) => void;
   onCloseFile: (path: string) => void;
   /** Whether the left-hand file tree is currently visible. */
@@ -29,6 +31,7 @@ const HIDDEN_SCROLLBAR_CLASSNAME =
 export function FileQuickRow({
   openPaths,
   selectedPath,
+  dirtyPaths,
   onSelectFile,
   onCloseFile,
   isTreeVisible,
@@ -77,6 +80,7 @@ export function FileQuickRow({
         >
           {openPaths.map((path, index) => {
             const isSelected = selectedPath === path;
+            const isDirty = dirtyPaths?.has(path) ?? false;
             const fileName = path.split("/").pop() || path;
             return (
               <div
@@ -102,6 +106,13 @@ export function FileQuickRow({
                   className="flex min-w-0 max-w-[160px] items-center pl-2.5 pr-1 text-xs cursor-pointer text-inherit"
                 >
                   <span className="truncate">{fileName}</span>
+                  {isDirty ? (
+                    <span
+                      className="ml-1 size-1.5 shrink-0 rounded-full bg-[var(--oh-foreground)]"
+                      data-testid={`file-quick-row-dirty-${path}`}
+                      aria-label={t(I18nKey.FILES$UNSAVED)}
+                    />
+                  ) : null}
                 </button>
                 <button
                   type="button"

@@ -3,6 +3,7 @@ import { saveWorkspaceTextFile } from "#/api/workspace-file-save.api";
 import { useOptionalConversationId } from "#/hooks/use-conversation-id";
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
 import { useWorkspaceMutationCounter } from "#/stores/use-workspace-mutation-counter";
+import { useWorkspaceDocumentStore } from "#/stores/workspace-document-store";
 
 export function useSaveWorkspaceTextFile() {
   const { conversationId } = useOptionalConversationId();
@@ -30,6 +31,15 @@ export function useSaveWorkspaceTextFile() {
       });
     },
     onSuccess: async (_data, variables) => {
+      if (conversationId) {
+        useWorkspaceDocumentStore
+          .getState()
+          .markSynced(
+            conversationId,
+            variables.relativePath,
+            variables.content,
+          );
+      }
       bumpMutationCounter();
       await Promise.all([
         queryClient.invalidateQueries({
