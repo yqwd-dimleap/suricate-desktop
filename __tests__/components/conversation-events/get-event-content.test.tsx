@@ -80,14 +80,16 @@ describe("getEventContent", () => {
     expect(screen.queryByText("$ git status")).not.toBeInTheDocument();
   });
 
-  it("falls back to command-based title when summary is missing", () => {
+  it("falls back to an intent summary when summary is missing", () => {
     const actionWithoutSummary = { ...terminalActionEvent, summary: undefined };
     const { title } = getEventContent(actionWithoutSummary);
 
     render(<span>{title}</span>);
 
     // Without i18n loaded, the translation key renders as the raw key
-    expect(screen.getByText("ACTION_MESSAGE$RUN")).toBeInTheDocument();
+    expect(
+      screen.getByText("ACTION_MESSAGE$BASH_GIT_STATUS"),
+    ).toBeInTheDocument();
     expect(
       screen.queryByText("Check repository status"),
     ).not.toBeInTheDocument();
@@ -104,7 +106,9 @@ describe("getEventContent", () => {
 
     render(<span>{title}</span>);
 
-    expect(screen.getByText("ACTION_MESSAGE$RUN")).toBeInTheDocument();
+    expect(
+      screen.getByText("ACTION_MESSAGE$BASH_GIT_STATUS"),
+    ).toBeInTheDocument();
     expect(
       screen.queryByText('terminal: {"command":"git status"}'),
     ).not.toBeInTheDocument();
@@ -122,10 +126,32 @@ describe("getEventContent", () => {
 
     render(<span>{title}</span>);
 
-    expect(screen.getByText("OBSERVATION_MESSAGE$RUN")).toBeInTheDocument();
+    expect(
+      screen.getByText("OBSERVATION_MESSAGE$BASH_GIT_STATUS"),
+    ).toBeInTheDocument();
     expect(
       screen.queryByText('terminal: {"command":"git status"}'),
     ).not.toBeInTheDocument();
+  });
+
+  it("summarizes lint commands without showing the raw shell line", () => {
+    const lintAction: ActionEvent = {
+      ...terminalActionEvent,
+      summary: undefined,
+      action: {
+        kind: "TerminalAction",
+        command: "ruff check src/llamafactory/train/",
+        is_input: false,
+        timeout: null,
+        reset: false,
+      },
+    };
+    const { title } = getEventContent(lintAction);
+
+    render(<span>{title}</span>);
+
+    expect(screen.getByText("ACTION_MESSAGE$BASH_LINT")).toBeInTheDocument();
+    expect(screen.queryByText(/ruff check/)).not.toBeInTheDocument();
   });
 
   it("renders a file view action through the file-editor visualizer", () => {

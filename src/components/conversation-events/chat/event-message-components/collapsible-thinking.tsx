@@ -1,7 +1,6 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
-import ArrowDown from "#/icons/angle-down-solid.svg?react";
-import ArrowUp from "#/icons/angle-up-solid.svg?react";
+import { ChevronDown, ChevronRight } from "lucide-react";
 import { I18nKey } from "#/i18n/declaration";
 import { useThinkingElapsedSeconds } from "#/hooks/use-thinking-elapsed-seconds";
 import { TextShimmer } from "../../../shared/text-shimmer";
@@ -40,7 +39,7 @@ export function CollapsibleThinking({
     return null;
   }
 
-  const Chevron = expanded ? ArrowUp : ArrowDown;
+  const Chevron = expanded ? ChevronDown : ChevronRight;
   const settledLabel = isThinking
     ? null
     : getSettledThinkingLabel(elapsedSeconds);
@@ -48,7 +47,7 @@ export function CollapsibleThinking({
 
   return (
     <div
-      className="mt-1 w-full pt-1 text-sm"
+      className="w-full py-0.5 text-sm leading-5"
       data-testid="collapsible-thinking"
       data-thinking={isThinking || undefined}
     >
@@ -67,7 +66,10 @@ export function CollapsibleThinking({
         className="flex w-full cursor-pointer items-center gap-1 text-left"
         disabled={!hasContent}
       >
-        <Chevron className="h-3.5 w-3.5 flex-shrink-0 fill-[var(--oh-muted)]" />
+        <Chevron
+          className="h-3.5 w-3.5 flex-shrink-0 text-[var(--oh-muted)]"
+          aria-hidden
+        />
         {isThinking ? (
           <TextShimmer
             as="span"
@@ -107,7 +109,7 @@ export function CollapsibleThinking({
       </button>
 
       {expanded && hasContent && (
-        <div className="mt-1.5 pl-5" data-testid="collapsible-thinking-content">
+        <div className="mt-1 pl-5" data-testid="collapsible-thinking-content">
           <MarkdownRenderer>{content}</MarkdownRenderer>
         </div>
       )}

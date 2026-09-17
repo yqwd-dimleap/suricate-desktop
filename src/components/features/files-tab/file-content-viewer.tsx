@@ -96,7 +96,13 @@ export function FileContentViewer({
       }
     : null;
 
-  if (query.isLoading) {
+  // Treat disabled / still-pending queries as loading — never as a hard
+  // error. React Query leaves `isLoading` false when `enabled` is false, so
+  // the old `!query.data` branch flashed "Could not load this file" while a
+  // workspace session (or absolute-path download) was still warming up.
+  // Only show the spinner when we have nothing to render yet; background
+  // refetches keep the previous content on screen.
+  if (!query.data && !query.isError) {
     return (
       <div className="flex h-full w-full items-center justify-center text-sm text-[var(--oh-muted)]">
         {t(I18nKey.FILES$LOADING_FILES)}

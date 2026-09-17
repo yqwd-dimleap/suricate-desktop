@@ -2,12 +2,14 @@ import { renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
+import WorkspacesService from "#/api/workspaces-service/workspaces-service.api";
 import { useCreateConversation } from "#/hooks/mutation/use-create-conversation";
 import { SuggestedTask } from "#/utils/types";
 import {
   getStoredConversationMetadata,
   removeStoredConversationMetadata,
 } from "#/api/conversation-metadata-store";
+import { LAST_USED_WORKSPACE_PATH_KEY } from "#/utils/last-used-workspace";
 
 vi.mock("#/hooks/use-tracking", () => ({
   useTracking: () => ({
@@ -99,6 +101,7 @@ describe("useCreateConversation", () => {
     removeStoredConversationMetadata("conv-with-plugins");
     removeStoredConversationMetadata("conv-ref-stamp");
     removeStoredConversationMetadata("conv-dropdown-override");
+    window.localStorage.removeItem(LAST_USED_WORKSPACE_PATH_KEY);
   });
 
   it("passes suggested tasks to the V1 create conversation API", async () => {
@@ -742,5 +745,71 @@ describe("useCreateConversation", () => {
 
     const call = createConversationSpy.mock.lastCall;
     expect(call?.[0]?.agentProfileId).toBe("profile-luna");
+  });
+
+  it("auto-attaches the last-used local workspace when none is provided", async () => {
+    window.localStorage.setItem(
+      LAST_USED_WORKSPACE_PATH_KEY,
+      "/Users/me/dev/repo",
+    );
+    vi.spyOn(WorkspacesService, "listWorkspaces").mockResolvedValue({
+      workspaces: [
+        {
+          id: "/Users/me/dev/repo",
+          name: "repo",
+          path: "/Users/me/dev/repo",
+        },
+      ],
+      workspaceParents: [],
+    });
+    const createConversationSpy = vi
+      .spyOn(AgentServerConversationService, "createConversation")
+      .mockResolvedValue({
+        id: "task-id",
+        app_conversation_id: "conv-1",
+        agent_server_url: "http://agent-server.local",
+      } as never);
+
+    const { result } = renderHook(() => useCreateConversation(), {
+      wrapper: ({ children }) => (
+        <QueryClientProvider client={new QueryClient()}>
+          {children}
+        </QueryClientProvider>
+      ),
+    });
+
+    await result.current.mutateAsync({ query: "hello" });
+
+    expect(createConversationSpy.mock.lastCall?.[0]?.workingDirOverride).toBe(
+      "/Users/me/dev/repo",
+    );
+  });
+
+  it("skips auto-attach when noWorkspace is set", async () => {
+    window.localStorage.setItem(
+      LAST_USED_WORKSPACE_PATH_KEY,
+      "/Users/me/dev/repo",
+    );
+    const createConversationSpy = vi
+      .spyOn(AgentServerConversationService, "createConversation")
+      .mockResolvedValue({
+        id: "task-id",
+        app_conversation_id: "conv-1",
+        agent_server_url: "http://agent-server.local",
+      } as never);
+
+    const { result } = renderHook(() => useCreateConversation(), {
+      wrapper: ({ children }) => (
+        <QueryClientProvider client={new QueryClient()}>
+          {children}
+        </QueryClientProvider>
+      ),
+    });
+
+    await result.current.mutateAsync({ query: "hello", noWorkspace: true });
+
+    expect(
+      createConversationSpy.mock.lastCall?.[0]?.workingDirOverride,
+    ).toBeUndefined();
   });
 });

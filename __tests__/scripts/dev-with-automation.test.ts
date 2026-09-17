@@ -1015,8 +1015,8 @@ describe("dev-with-automation CLI", () => {
 
   it("fails fast with a clear error when OH_AGENT_SERVER_LOCAL_PATH is invalid", async () => {
     // Arrange: an absolute but empty directory — `validateLocalAgentServerPath`
-    // requires the four workspace subdirs (openhands-agent-server, openhands-sdk,
-    // openhands-tools, openhands-workspace) and must reject this.
+    // requires the four workspace subdirs (suricate-agent-server, suricate-sdk,
+    // suricate-tools, suricate-workspace) and must reject this.
     const emptyDir = mkdtempSync(path.join(tmpdir(), "bad-sdk-"));
 
     // Stub a no-op `uvx` on PATH so `checkPrerequisites` passes even on CI

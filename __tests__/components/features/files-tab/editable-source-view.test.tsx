@@ -1,9 +1,11 @@
+import React from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, screen } from "@testing-library/react";
+import { fireEvent, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { renderWithProviders } from "../../../../test-utils";
 import { EditableSourceView } from "#/components/features/files-tab/editable-source-view";
 import { useWorkspaceDocumentStore } from "#/stores/workspace-document-store";
+import { useFilesTabStore } from "#/stores/files-tab-store";
 
 /* eslint-disable i18next/no-literal-string -- editor fixture bodies, not UI copy */
 
@@ -31,20 +33,100 @@ vi.mock("#/hooks/query/use-unified-git-diff", () => ({
   }),
 }));
 
+vi.mock("#/hooks/query/use-git-blame", () => ({
+  useGitBlame: () => ({
+    lines: [
+      {
+        line: 1,
+        sha: "abc",
+        author: "alice",
+        authorTime: "2026-09-17T10:00:00+08:00",
+        summary: "work",
+      },
+    ],
+    isUnsupported: false,
+  }),
+}));
+
+type FakeAction = {
+  id: string;
+  label: string;
+  precondition?: string;
+  run: () => void;
+  dispose: () => void;
+};
+
+const registeredActions: FakeAction[] = [];
+const contextKeys = new Map<string, { value: boolean; set: (v: boolean) => void }>();
+
+function createFakeEditor() {
+  return {
+    addCommand: vi.fn(),
+    createContextKey: (key: string, defaultValue: boolean) => {
+      const entry = {
+        value: defaultValue,
+        set: (next: boolean) => {
+          entry.value = next;
+        },
+      };
+      contextKeys.set(key, entry);
+      return entry;
+    },
+    addAction: (descriptor: {
+      id: string;
+      label: string;
+      precondition?: string;
+      run: () => void;
+    }) => {
+      const action: FakeAction = {
+        id: descriptor.id,
+        label: descriptor.label,
+        precondition: descriptor.precondition,
+        run: descriptor.run,
+        dispose: vi.fn(),
+      };
+      registeredActions.push(action);
+      return action;
+    },
+    deltaDecorations: () => [],
+    revealLineInCenter: vi.fn(),
+    setPosition: vi.fn(),
+    getScrollTop: () => 0,
+    getLayoutInfo: () => ({ height: 400 }),
+    getTopForLineNumber: (line: number) => (line - 1) * 20,
+    getBottomForLineNumber: (line: number) => line * 20,
+    onDidScrollChange: () => ({ dispose: vi.fn() }),
+    onDidLayoutChange: () => ({ dispose: vi.fn() }),
+    onDidContentSizeChange: () => ({ dispose: vi.fn() }),
+    onDidChangeConfiguration: () => ({ dispose: vi.fn() }),
+  };
+}
+
 vi.mock("@monaco-editor/react", () => ({
   Editor: ({
     value,
     onChange,
+    onMount,
   }: {
     value: string;
     onChange?: (value: string | undefined) => void;
-  }) => (
-    <textarea
-      data-testid="monaco-editor"
-      value={value}
-      onChange={(event) => onChange?.(event.target.value)}
-    />
-  ),
+    onMount?: (editor: ReturnType<typeof createFakeEditor>, monaco: object) => void;
+  }) => {
+    React.useEffect(() => {
+      onMount?.(createFakeEditor(), {
+        KeyMod: { CtrlCmd: 2048 },
+        KeyCode: { KeyS: 49 },
+      });
+      // eslint-disable-next-line react-hooks/exhaustive-deps -- mount once
+    }, []);
+    return (
+      <textarea
+        data-testid="monaco-editor"
+        value={value}
+        onChange={(event) => onChange?.(event.target.value)}
+      />
+    );
+  },
 }));
 
 const CID = "test-conversation-id";
@@ -59,7 +141,13 @@ function setEditorValue(value: string) {
 describe("EditableSourceView", () => {
   beforeEach(() => {
     mutateMock.mockReset();
+    registeredActions.length = 0;
+    contextKeys.clear();
     useWorkspaceDocumentStore.getState().reset();
+    useFilesTabStore.setState({
+      isAnnotateEnabled: false,
+      isAnnotateUnsupported: false,
+    });
   });
 
   it("keeps unsaved drafts after unmount so switching tabs does not drop edits", () => {
@@ -168,5 +256,40 @@ describe("EditableSourceView", () => {
     rerender(<EditableSourceView path="a.ts" text="aaa" />);
     expect(screen.getByTestId("monaco-editor")).toHaveValue("aaa-edit");
     expect(screen.getByTestId("editable-source-unsaved")).toBeInTheDocument();
+  });
+
+  it("registers Annotate / Close Annotations context-menu actions", async () => {
+    renderWithProviders(<EditableSourceView path={PATH} text="hello" />);
+
+    await waitFor(() => {
+      expect(registeredActions.map((action) => action.id)).toEqual([
+        "files.annotateWithGitBlame",
+        "files.closeAnnotations",
+      ]);
+    });
+
+    registeredActions
+      .find((action) => action.id === "files.annotateWithGitBlame")
+      ?.run();
+    expect(useFilesTabStore.getState().isAnnotateEnabled).toBe(true);
+    await waitFor(() => {
+      expect(contextKeys.get("filesGitBlameAnnotateEnabled")?.value).toBe(true);
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId("git-blame-gutter")).toBeInTheDocument();
+    });
+
+    registeredActions
+      .find((action) => action.id === "files.closeAnnotations")
+      ?.run();
+    expect(useFilesTabStore.getState().isAnnotateEnabled).toBe(false);
+    await waitFor(() => {
+      expect(contextKeys.get("filesGitBlameAnnotateEnabled")?.value).toBe(
+        false,
+      );
+    });
+    await waitFor(() => {
+      expect(screen.queryByTestId("git-blame-gutter")).not.toBeInTheDocument();
+    });
   });
 });

@@ -48,8 +48,6 @@ vi.mock("#/api/cloud/conversation-service.api", () => ({
     readCloudConversationFileMock(...args),
 }));
 
-const fetchMock = vi.fn();
-
 function makeWrapper() {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
@@ -71,8 +69,6 @@ const BASE_URL =
 
 describe("useWorkspaceFileContent", () => {
   beforeEach(() => {
-    vi.stubGlobal("fetch", fetchMock);
-    fetchMock.mockReset();
     useWorkspaceSessionMock.mockReset();
     useActiveConversationMock.mockReset();
     useRuntimeIsReadyMock.mockReset();
@@ -85,6 +81,7 @@ describe("useWorkspaceFileContent", () => {
         id: "conv-1",
         conversation_url: "https://agent.example.com/api/conversations/conv-1",
         session_api_key: "session-key",
+        workspace: { working_dir: "/workspace/project" },
       },
     });
     useWorkspaceSessionMock.mockReturnValue({
@@ -100,20 +97,12 @@ describe("useWorkspaceFileContent", () => {
     useWorkspaceMutationCounter.setState({ count: 0 });
   });
 
-  afterEach(() => {
-    vi.unstubAllGlobals();
-  });
-
   function arrayBufferFromString(value: string): ArrayBuffer {
     return new TextEncoder().encode(value).buffer as ArrayBuffer;
   }
 
-  it("returns a static URL on the workspace fileserver for text content", async () => {
-    fetchMock.mockResolvedValue({
-      ok: true,
-      status: 200,
-      arrayBuffer: () => Promise.resolve(arrayBufferFromString("# Hello")),
-    });
+  it("downloads text via FileClient header auth and keeps the fileserver staticUrl", async () => {
+    downloadFileMock.mockResolvedValue(arrayBufferFromString("# Hello"));
 
     const { result } = renderHook(
       () => useWorkspaceFileContent("docs/readme.md"),
@@ -122,9 +111,10 @@ describe("useWorkspaceFileContent", () => {
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-    expect(fetchMock).toHaveBeenCalledWith(
-      `${BASE_URL}docs/readme.md`,
-      expect.objectContaining({ credentials: "include" }),
+    expect(downloadFileMock).toHaveBeenCalledWith(
+      "https://agent.example.com/api/conversations/conv-1",
+      "session-key",
+      "/workspace/project/docs/readme.md",
     );
     expect(result.current.data).toEqual({
       path: "docs/readme.md",
@@ -135,7 +125,32 @@ describe("useWorkspaceFileContent", () => {
     });
   });
 
-  it("does not fetch image bytes — image staticUrl is rendered directly", async () => {
+  it("still loads text when the workspace session cookie is unavailable", async () => {
+    useWorkspaceSessionMock.mockReturnValue({
+      data: null,
+      isLoading: false,
+      isError: true,
+      error: new Error("cookie mint failed"),
+    });
+    downloadFileMock.mockResolvedValue(arrayBufferFromString("plain"));
+
+    const { result } = renderHook(
+      () => useWorkspaceFileContent("docs/readme.md"),
+      { wrapper: makeWrapper() },
+    );
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(result.current.data).toEqual({
+      path: "docs/readme.md",
+      kind: "text",
+      text: "plain",
+      staticUrl: `data:text/markdown;charset=utf-8;base64,${btoa("plain")}`,
+      mimeType: "text/markdown",
+    });
+  });
+
+  it("does not download image bytes when a workspace session URL exists", async () => {
     const { result } = renderHook(
       () => useWorkspaceFileContent("assets/logo.png"),
       { wrapper: makeWrapper() },
@@ -143,7 +158,7 @@ describe("useWorkspaceFileContent", () => {
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect(downloadFileMock).not.toHaveBeenCalled();
     expect(result.current.data).toEqual({
       path: "assets/logo.png",
       kind: "image",
@@ -153,14 +168,14 @@ describe("useWorkspaceFileContent", () => {
     });
   });
 
-  it("does not fetch PDF bytes — PDF staticUrl is rendered directly", async () => {
+  it("does not download PDF bytes when a workspace session URL exists", async () => {
     const { result } = renderHook(() => useWorkspaceFileContent("report.pdf"), {
       wrapper: makeWrapper(),
     });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect(downloadFileMock).not.toHaveBeenCalled();
     expect(result.current.data).toEqual({
       path: "report.pdf",
       kind: "pdf",
@@ -170,13 +185,33 @@ describe("useWorkspaceFileContent", () => {
     });
   });
 
-  it("flips text → binary when the fetched bytes contain a NUL", async () => {
-    const binary = new Uint8Array([0x01, 0x00, 0x02]).buffer;
-    fetchMock.mockResolvedValue({
-      ok: true,
-      status: 200,
-      arrayBuffer: () => Promise.resolve(binary),
+  it("falls back to a data URI for images when the workspace session is missing", async () => {
+    useWorkspaceSessionMock.mockReturnValue({
+      data: null,
+      isLoading: false,
+      isError: false,
+      error: null,
     });
+    const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47]).buffer;
+    downloadFileMock.mockResolvedValue(png);
+
+    const { result } = renderHook(
+      () => useWorkspaceFileContent("assets/logo.png"),
+      { wrapper: makeWrapper() },
+    );
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(downloadFileMock).toHaveBeenCalled();
+    expect(result.current.data?.kind).toBe("image");
+    expect(result.current.data?.staticUrl.startsWith("data:image/png;base64,")).toBe(
+      true,
+    );
+  });
+
+  it("flips text → binary when the downloaded bytes contain a NUL", async () => {
+    const binary = new Uint8Array([0x01, 0x00, 0x02]).buffer;
+    downloadFileMock.mockResolvedValue(binary);
 
     const { result } = renderHook(
       () => useWorkspaceFileContent("data/blob.bin"),
@@ -194,17 +229,9 @@ describe("useWorkspaceFileContent", () => {
   });
 
   it("refetches text content after a workspace mutation tick", async () => {
-    fetchMock
-      .mockResolvedValueOnce({
-        ok: true,
-        status: 200,
-        arrayBuffer: () => Promise.resolve(arrayBufferFromString("first")),
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        status: 200,
-        arrayBuffer: () => Promise.resolve(arrayBufferFromString("second")),
-      });
+    downloadFileMock
+      .mockResolvedValueOnce(arrayBufferFromString("first"))
+      .mockResolvedValueOnce(arrayBufferFromString("second"));
 
     const { result } = renderHook(
       () => useWorkspaceFileContent("docs/readme.md"),
@@ -218,7 +245,7 @@ describe("useWorkspaceFileContent", () => {
     });
 
     await waitFor(() => expect(result.current.data?.text).toBe("second"));
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(downloadFileMock).toHaveBeenCalledTimes(2);
   });
 
   it("does not start a file request before a path is selected", async () => {
@@ -228,34 +255,11 @@ describe("useWorkspaceFileContent", () => {
       setTimeout(resolve, 10);
     });
 
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect(downloadFileMock).not.toHaveBeenCalled();
   });
 
-  it("does not start a file request before the workspace session is minted", async () => {
-    useWorkspaceSessionMock.mockReturnValue({
-      data: null,
-      isLoading: true,
-      isError: false,
-      error: null,
-    });
-
-    renderHook(() => useWorkspaceFileContent("docs/readme.md"), {
-      wrapper: makeWrapper(),
-    });
-
-    await new Promise((resolve) => {
-      setTimeout(resolve, 10);
-    });
-
-    expect(fetchMock).not.toHaveBeenCalled();
-  });
-
-  it("surfaces a non-OK response as an error", async () => {
-    fetchMock.mockResolvedValue({
-      ok: false,
-      status: 404,
-      arrayBuffer: () => Promise.resolve(new ArrayBuffer(0)),
-    });
+  it("surfaces a download failure as an error", async () => {
+    downloadFileMock.mockRejectedValue(new Error("Failed to read missing.txt: 404"));
 
     const { result } = renderHook(
       () => useWorkspaceFileContent("missing.txt"),
@@ -268,6 +272,31 @@ describe("useWorkspaceFileContent", () => {
       expect.objectContaining({
         message: "Failed to read missing.txt: 404",
       }),
+    );
+  });
+
+  it("ignores blank conversation session_api_key so the backend key is used", async () => {
+    useActiveConversationMock.mockReturnValue({
+      data: {
+        id: "conv-1",
+        conversation_url: "https://agent.example.com/api/conversations/conv-1",
+        session_api_key: "   ",
+        workspace: { working_dir: "/workspace/project" },
+      },
+    });
+    downloadFileMock.mockResolvedValue(arrayBufferFromString("ok"));
+
+    const { result } = renderHook(
+      () => useWorkspaceFileContent("docs/readme.md"),
+      { wrapper: makeWrapper() },
+    );
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(downloadFileMock).toHaveBeenCalledWith(
+      "https://agent.example.com/api/conversations/conv-1",
+      null,
+      "/workspace/project/docs/readme.md",
     );
   });
 
@@ -308,7 +337,6 @@ describe("useWorkspaceFileContent", () => {
         "/workspace/project/docs/readme.md",
       );
       expect(downloadFileMock).not.toHaveBeenCalled();
-      expect(fetchMock).not.toHaveBeenCalled();
       expect(result.current.data).toEqual({
         path: "docs/readme.md",
         kind: "text",
@@ -357,7 +385,6 @@ describe("useWorkspaceFileContent", () => {
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
       expect(downloadFileMock).not.toHaveBeenCalled();
-      expect(fetchMock).not.toHaveBeenCalled();
       expect(result.current.data).toEqual({
         path: "assets/logo.svg",
         kind: "image",

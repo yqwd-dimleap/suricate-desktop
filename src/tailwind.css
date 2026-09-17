@@ -657,6 +657,28 @@ button.extension-module-card-interactive {
   border-radius: 1px;
 }
 
+/* Monaco Git Blame annotate column (left of line numbers) */
+.git-blame-gutter-stripe-a {
+  background: rgba(59, 130, 246, 0.14);
+}
+
+.git-blame-gutter-stripe-b {
+  background: rgba(59, 130, 246, 0.28);
+}
+
+.git-blame-gutter-block-hover {
+  background: rgba(59, 130, 246, 0.4);
+}
+
+.git-blame-gutter-label {
+  color: var(--oh-muted);
+  font-size: 11px;
+  font-style: italic;
+  pointer-events: none;
+  user-select: none;
+  white-space: nowrap;
+}
+
 /* CTA card gradient and shadow */
 .cta-card-gradient {
   background:

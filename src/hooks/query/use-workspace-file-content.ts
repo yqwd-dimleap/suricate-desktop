@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 
 import { readCloudConversationFile } from "#/api/cloud/conversation-service.api";
 import { getActiveBackend } from "#/api/backend-registry/active-store";
+import AgentServerRuntimeService from "#/api/runtime-service/agent-server-runtime-service";
 import { getGitPath } from "#/utils/get-git-path";
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
 import { useRuntimeIsReady } from "#/hooks/use-runtime-is-ready";
@@ -127,14 +128,25 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
 }
 
 /**
- * Reads a single file out of the active conversation's workspace via the
- * agent server's static workspace fileserver and classifies it as
- * text/image/pdf/binary so the UI can pick a renderer.
+ * Reads a single file out of the active conversation's workspace and
+ * classifies it as text/image/pdf/binary so the UI can pick a renderer.
  *
- * Image and PDF kinds are rendered directly from `staticUrl` (no fetch
- * here). Text/binary classification still requires reading the body so
- * we can run a NUL-byte sniff and decode UTF-8 for the plain/markdown
- * renderers.
+ * Local backends download bytes through {@link AgentServerRuntimeService}
+ * (`FileClient` + `X-Session-API-Key`) — the same authenticated path the
+ * file tree / plugin viewer already use. Relying only on the workspace
+ * static fileserver + cookie broke Electron / some Chromium builds where
+ * the `SameSite=None; Secure; Partitioned` cookie is minted but never
+ * attached to subsequent GETs, leaving every Files-tab selection on
+ * "Could not load this file".
+ *
+ * The workspace-session cookie URL is still preferred for `staticUrl`
+ * when available so rich HTML / image / PDF iframes can load relative
+ * assets; when the session is missing we fall back to a `data:` URI built
+ * from the downloaded bytes.
+ *
+ * Image and PDF kinds skip the byte download when a session URL exists
+ * (iframe / `<img>` load them directly). Cloud still uses the first-class
+ * `/file` endpoint and `data:` URIs.
  *
  * Pass a falsy `relativePath` to disable the query (e.g. when no file is
  * selected yet).
@@ -155,7 +167,8 @@ export function useWorkspaceFileContent(relativePath: string | null) {
 
   const conversationId = conversation?.id;
   const conversationUrl = conversation?.conversation_url;
-  const sessionApiKey = conversation?.session_api_key;
+  // Empty string must not override the backend registry key via `??`.
+  const sessionApiKey = conversation?.session_api_key?.trim() || null;
   const selectedRepository = conversation?.selected_repository;
   const workingDir = conversation?.workspace?.working_dir?.trim();
   const baseUrl = workspaceSession?.baseUrl;
@@ -166,6 +179,7 @@ export function useWorkspaceFileContent(relativePath: string | null) {
   // swallows it and returns ""). Anchor the file against the working dir the
   // same way the diff view builds its git-diff path (see use-unified-git-diff),
   // then force a leading slash since `getGitPath`'s default is relative.
+  // Local `FileClient.downloadFile` uses the same absolute-path contract.
   const gitPath = getGitPath(selectedRepository, workingDir);
   const workspaceRoot = gitPath.startsWith("/") ? gitPath : `/${gitPath}`;
   const absoluteFilePath = relativePath
@@ -178,13 +192,14 @@ export function useWorkspaceFileContent(relativePath: string | null) {
       conversationId,
       conversationUrl,
       sessionApiKey,
-      isCloud ? "cloud" : baseUrl,
+      isCloud ? "cloud" : (baseUrl ?? "header-auth"),
       relativePath,
       absoluteFilePath,
       workspaceMutationCount,
     ],
     queryFn: async () => {
       if (!relativePath) throw new Error("No path");
+      if (!absoluteFilePath) throw new Error("No absolute path");
 
       const kind = classifyKind(relativePath);
       const mimeType = guessMimeType(relativePath);
@@ -197,7 +212,7 @@ export function useWorkspaceFileContent(relativePath: string | null) {
         // decoded result and served as base64 data URIs.
         const content = await readCloudConversationFile(
           conversationId!,
-          absoluteFilePath!,
+          absoluteFilePath,
         );
 
         if (kind === "text") {
@@ -236,47 +251,53 @@ export function useWorkspaceFileContent(relativePath: string | null) {
         };
       }
 
-      // Local: rely on the workspace-session cookie minted by
-      // useWorkspaceSession to authenticate the same-origin static
-      // fileserver fetch.
-      if (!baseUrl) throw new Error("No workspace session");
+      const sessionStaticUrl = baseUrl
+        ? joinWorkspaceUrl(baseUrl, relativePath)
+        : null;
 
-      const staticUrl = joinWorkspaceUrl(baseUrl, relativePath);
-
-      // Image / PDF: don't fetch the bytes — the consumer renders them
-      // directly via `staticUrl` in an iframe or <img>. The browser
-      // will attach the `oh_workspace_session_key` cookie minted by
-      // `useWorkspaceSession` so the request authenticates without us
-      // having to set any headers (which a top-level <iframe src> can't
-      // do anyway).
+      // Image / PDF: prefer the cookie-authenticated fileserver URL so
+      // `<iframe>` / `<img>` can load without embedding large binaries.
+      // Fall back to a header-auth download + data URI when the session
+      // cookie path is unavailable (Electron / older agent-servers).
       if (kind !== "text") {
+        if (sessionStaticUrl) {
+          return {
+            path: relativePath,
+            kind,
+            text: null,
+            staticUrl: sessionStaticUrl,
+            mimeType,
+          };
+        }
+        const buffer = await AgentServerRuntimeService.downloadFile(
+          conversationUrl,
+          sessionApiKey,
+          absoluteFilePath,
+        );
         return {
           path: relativePath,
           kind,
           text: null,
-          staticUrl,
+          staticUrl: `data:${mimeType};base64,${arrayBufferToBase64(buffer)}`,
           mimeType,
         };
       }
 
-      // For our own fetch we also rely on the workspace-session cookie
-      // (it travels because we opt in to credentialed requests). This
-      // matches the auth path the iframe / <img> uses, and avoids a CORS
-      // preflight for a custom header.
-      const response = await fetch(staticUrl, {
-        credentials: "include",
-      });
-      if (!response.ok) {
-        throw new Error(`Failed to read ${relativePath}: ${response.status}`);
-      }
-
-      const buffer = await response.arrayBuffer();
+      // Text (and text-like) content: always use header auth. Cookie-only
+      // fetch was the Files-tab failure mode on desktop.
+      const buffer = await AgentServerRuntimeService.downloadFile(
+        conversationUrl,
+        sessionApiKey,
+        absoluteFilePath,
+      );
       if (isLikelyBinary(buffer)) {
         return {
           path: relativePath,
           kind: "binary",
           text: null,
-          staticUrl,
+          staticUrl:
+            sessionStaticUrl ??
+            `data:application/octet-stream;base64,${arrayBufferToBase64(buffer)}`,
           mimeType: "application/octet-stream",
         };
       }
@@ -286,7 +307,9 @@ export function useWorkspaceFileContent(relativePath: string | null) {
         path: relativePath,
         kind: "text",
         text,
-        staticUrl,
+        staticUrl:
+          sessionStaticUrl ??
+          `data:${mimeType};charset=utf-8;base64,${arrayBufferToBase64(buffer)}`,
         mimeType,
       };
     },
@@ -294,7 +317,7 @@ export function useWorkspaceFileContent(relativePath: string | null) {
       runtimeIsReady &&
       !!conversationId &&
       !!relativePath &&
-      (isCloud || !!baseUrl),
+      !!absoluteFilePath,
     retry: false,
     staleTime: 1000 * 5,
     gcTime: 1000 * 60,

@@ -17,10 +17,18 @@ import { I18nKey } from "#/i18n/declaration";
 import FolderIcon from "#/icons/folder.svg?react";
 import { getWorkspacesUnsupportedMessage } from "#/utils/workspaces-compatibility";
 
+import {
+  HOME_SELECTED_WORKSPACE_PATH_KEY,
+  readLastUsedWorkspacePath,
+  writeLastUsedWorkspacePath,
+} from "#/utils/last-used-workspace";
+
 import { BrandButton } from "../settings/brand-button";
 import { WorkspaceDropdown } from "./workspace-dropdown/workspace-dropdown";
 import { FolderBrowserModal } from "./workspace-dropdown/folder-browser-modal";
 import { ManageWorkspacesModal } from "./workspace-dropdown/manage-workspaces-modal";
+
+export { HOME_SELECTED_WORKSPACE_PATH_KEY };
 
 interface WorkspaceSelectionFormProps {
   isLoadingSettings?: boolean;
@@ -32,36 +40,6 @@ interface WorkspaceSelectionFormProps {
    * also flips from "Launch" to "Confirm" so the action matches the new flow.
    */
   onConfirm?: (workspace: LocalWorkspace) => void;
-}
-
-export const HOME_SELECTED_WORKSPACE_PATH_KEY =
-  "oh:home-selected-workspace-path";
-
-function getStoredSelectedWorkspacePath(): string | null {
-  if (typeof window === "undefined") return null;
-
-  try {
-    const path = window.sessionStorage.getItem(
-      HOME_SELECTED_WORKSPACE_PATH_KEY,
-    );
-    return path && path.length > 0 ? path : null;
-  } catch {
-    return null;
-  }
-}
-
-function setStoredSelectedWorkspacePath(path: string | null): void {
-  if (typeof window === "undefined") return;
-
-  try {
-    if (path) {
-      window.sessionStorage.setItem(HOME_SELECTED_WORKSPACE_PATH_KEY, path);
-    } else {
-      window.sessionStorage.removeItem(HOME_SELECTED_WORKSPACE_PATH_KEY);
-    }
-  } catch {
-    // sessionStorage may be unavailable in private browsing contexts.
-  }
 }
 
 export function WorkspaceSelectionForm({
@@ -105,13 +83,13 @@ export function WorkspaceSelectionForm({
   const handleWorkspaceChange = React.useCallback(
     (workspace: LocalWorkspace | null) => {
       setSelectedWorkspace(workspace);
-      setStoredSelectedWorkspacePath(workspace?.path ?? null);
+      writeLastUsedWorkspacePath(workspace?.path ?? null);
     },
     [],
   );
 
   React.useEffect(() => {
-    const storedPath = getStoredSelectedWorkspacePath();
+    const storedPath = readLastUsedWorkspacePath();
     if (!storedPath) return;
 
     const restoredWorkspace = workspaces.find((w) => w.path === storedPath);
@@ -127,7 +105,7 @@ export function WorkspaceSelectionForm({
       !hasWorkspaceError &&
       !workspacesUnsupportedMessage
     ) {
-      setStoredSelectedWorkspacePath(null);
+      writeLastUsedWorkspacePath(null);
       setSelectedWorkspace((current) =>
         current?.path === storedPath ? null : current,
       );

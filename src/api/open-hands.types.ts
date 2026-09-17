@@ -123,6 +123,17 @@ export interface GitCommitsPage {
   hasMore: boolean;
 }
 
+/** One annotated source line from GET /api/git/blame. */
+export interface GitBlameLine {
+  /** 1-based line number in the working-tree file. */
+  line: number;
+  sha: string;
+  author: string;
+  /** ISO 8601 author date with UTC offset. */
+  authorTime: string;
+  summary: string;
+}
+
 export interface InputMetadata {
   name: string;
   description: string;

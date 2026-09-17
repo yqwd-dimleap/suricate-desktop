@@ -5,10 +5,10 @@
  *
  * Verifies that the released automation package (openhands-automation on PyPI)
  * uses the SDK version expected for that automation release for all agent SDK libraries:
- *   - openhands-sdk
- *   - openhands-tools
- *   - openhands-workspace
- *   - openhands-agent-server
+ *   - suricate-sdk
+ *   - suricate-tools
+ *   - suricate-workspace
+ *   - suricate-agent-server
  *
  * This script checks the RELEASED PyPI version of openhands-automation (as specified
  * by versions.automation in config/defaults.json), not the main branch.
@@ -93,13 +93,21 @@ const colors = {
   dim: "\x1b[2m",
 };
 
-// SDK packages that must have matching versions
+// SDK packages that must have matching versions. Automation on PyPI still
+// declares the legacy `openhands-*` names; local/git installs use `suricate-*`.
+// Accept either spelling when reading requires_dist.
 const SDK_PACKAGES = [
-  "openhands-sdk",
-  "openhands-tools",
-  "openhands-workspace",
-  "openhands-agent-server",
+  "suricate-sdk",
+  "suricate-tools",
+  "suricate-workspace",
+  "suricate-agent-server",
 ];
+const SDK_PACKAGE_ALIASES = {
+  "suricate-sdk": ["suricate-sdk", "openhands-sdk"],
+  "suricate-tools": ["suricate-tools", "openhands-tools"],
+  "suricate-workspace": ["suricate-workspace", "openhands-workspace"],
+  "suricate-agent-server": ["suricate-agent-server", "openhands-agent-server"],
+};
 
 // Configurable automation package (can be overridden via env)
 const AUTOMATION_PACKAGE_NAME = process.env.AUTOMATION_PACKAGE_NAME || "openhands-automation";
@@ -260,18 +268,23 @@ async function fetchPyPIDependencies(packageName, version) {
  * Parse PyPI requires_dist array and extract SDK package versions
  *
  * PyPI returns dependencies in PEP 508 format like:
- *   "openhands-sdk>=1.46.0,<2.0.0"
- *   "openhands-tools==1.46.0"
- *   "openhands-workspace (>=1.46.0)"
+ *   "suricate-sdk>=1.46.0,<2.0.0"
+ *   "suricate-tools==1.46.0"
+ *   "suricate-workspace (>=1.46.0)"
  */
 function parseSdkVersionsFromRequiresDist(requiresDist) {
   const versions = {};
 
   for (const pkg of SDK_PACKAGES) {
+    const aliases = SDK_PACKAGE_ALIASES[pkg] ?? [pkg];
     for (const dep of requiresDist) {
-      // Check if the dependency starts with our package name
+      // Check if the dependency starts with our package name (or legacy alias).
       // The package name may be followed by whitespace, operators, or parentheses
-      if (!dep.toLowerCase().startsWith(pkg.toLowerCase())) {
+      const depLower = dep.toLowerCase();
+      const matchedAlias = aliases.find((alias) =>
+        depLower.startsWith(alias.toLowerCase()),
+      );
+      if (!matchedAlias) {
         continue;
       }
 

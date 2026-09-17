@@ -134,9 +134,11 @@ describe("EventGroup", () => {
       screen.getByText("EVENT_GROUP$ACTIONS_PROGRESS"),
     ).toBeInTheDocument();
     // The running action's title is rendered next to the summary. Translations
-    // aren't loaded in tests, so we just verify the action's translation key
-    // shows up (the localized version would interpolate the command).
-    expect(screen.getByText(/ACTION_MESSAGE\$RUN/)).toBeInTheDocument();
+    // aren't loaded in tests, so we just verify the bash intent key shows up
+    // (summarizeBashCommand maps echo → ACTION_MESSAGE$BASH_COMMAND).
+    expect(
+      screen.getByText("ACTION_MESSAGE$BASH_COMMAND"),
+    ).toBeInTheDocument();
   });
 
   it("shows an activity summary instead of the latest title once idle", () => {

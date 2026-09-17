@@ -160,7 +160,7 @@ export function GenericEventMessage({
   );
 
   return (
-    <div className="flex flex-col gap-1.5 my-1 py-1 text-sm w-full">
+    <div className="flex w-full min-w-0 flex-col gap-1 py-0.5 text-sm leading-5">
       {titleRow}
       {showDetails &&
         (typeof details === "string" ? (

@@ -51,10 +51,14 @@ export function SayHelloStep({
     if (!canSubmit || launchInFlightRef.current) return;
     launchInFlightRef.current = true;
 
-    // Explicitly omit `repository` and `workingDir` so the
-    // conversation starts with no workspace, per the spec.
+    // Explicit empty sandbox for first-run onboarding — do not auto-attach
+    // the last-used workspace.
     createConversation(
-      { query: message.trim(), entryPoint: "onboarding_say_hello" },
+      {
+        query: message.trim(),
+        noWorkspace: true,
+        entryPoint: "onboarding_say_hello",
+      },
       {
         onSuccess: (data) => {
           navigate(`/conversations/${data.conversation_id}`);

@@ -51,12 +51,12 @@ const AGENT_SERVER_GIT_REPO =
 const DEFAULT_AGENT_SERVER_GIT_REF =
   SHARED_DEFAULTS.agentServerSource?.gitRef ?? "v0.0.1-rc";
 const LOCAL_AGENT_SERVER_SUBDIRS = [
-  "openhands-agent-server",
-  "openhands-sdk",
-  "openhands-tools",
-  "openhands-workspace",
+  "suricate-agent-server",
+  "suricate-sdk",
+  "suricate-tools",
+  "suricate-workspace",
 ];
-// Temporary transitive-dep pin: openhands-sdk 1.40.1 leaves agent-client-protocol
+// Temporary transitive-dep pin: suricate-sdk 1.40.1 leaves agent-client-protocol
 // unbounded (>=0.10.1), but acp 0.11.0 reordered the ACP prompt() args and breaks
 // the SDK's ACP client. Hold acp <0.11 until a fixed SDK ships. See config/defaults.json.
 const AGENT_CLIENT_PROTOCOL_CONSTRAINT =
@@ -452,7 +452,7 @@ export const AGENT_SERVER_IMPORT_MODULES =
  * Environment variables (highest precedence first):
  * - OH_AGENT_SERVER_LOCAL_PATH: Absolute path to a suricate-sdk (or compatible)
  *   checkout. Runs the local checkout via uvx with editable installs of the
- *   workspace packages (openhands-sdk, openhands-tools, openhands-workspace) so
+ *   workspace packages (suricate-sdk, suricate-tools, suricate-workspace) so
  *   source edits are picked up without a manual reinstall. The agent-server
  *   itself is rebuilt from local source on each invocation (--reinstall).
  * - OH_AGENT_SERVER_GIT_REF: Git commit SHA, branch, or tag name
@@ -481,13 +481,13 @@ export function buildAgentServerCommand(env = process.env) {
     uvxArgs.push(
       "--reinstall",
       "--from",
-      path.join(localPath, "openhands-agent-server"),
+      path.join(localPath, "suricate-agent-server"),
       "--with-editable",
-      path.join(localPath, "openhands-sdk"),
+      path.join(localPath, "suricate-sdk"),
       "--with-editable",
-      path.join(localPath, "openhands-tools"),
+      path.join(localPath, "suricate-tools"),
       "--with-editable",
-      path.join(localPath, "openhands-workspace"),
+      path.join(localPath, "suricate-workspace"),
       "--with",
       AGENT_SERVER_POSTHOG_CONSTRAINT,
       "agent-server",
@@ -496,7 +496,7 @@ export function buildAgentServerCommand(env = process.env) {
   } else if (gitRef || !version) {
     // Use git ref with subdirectory syntax for uv workspace monorepo.
     // suricate-sdk (and upstream software-agent-sdk) keep packages in:
-    // openhands-agent-server/, openhands-sdk/, openhands-tools/, openhands-workspace/
+    // suricate-agent-server/, suricate-sdk/, suricate-tools/, suricate-workspace/
     // All four must come from the same ref so inter-package APIs stay in sync.
     //
     // --reinstall is required because the git branch may carry the same version
@@ -510,13 +510,13 @@ export function buildAgentServerCommand(env = process.env) {
     uvxArgs.push(
       "--reinstall",
       "--from",
-      `${baseGitUrl}#subdirectory=openhands-agent-server`,
+      `${baseGitUrl}#subdirectory=suricate-agent-server`,
       "--with",
-      `${baseGitUrl}#subdirectory=openhands-sdk`,
+      `${baseGitUrl}#subdirectory=suricate-sdk`,
       "--with",
-      `${baseGitUrl}#subdirectory=openhands-tools`,
+      `${baseGitUrl}#subdirectory=suricate-tools`,
       "--with",
-      `${baseGitUrl}#subdirectory=openhands-workspace`,
+      `${baseGitUrl}#subdirectory=suricate-workspace`,
       "--with",
       AGENT_SERVER_POSTHOG_CONSTRAINT,
       "agent-server",
@@ -525,18 +525,18 @@ export function buildAgentServerCommand(env = process.env) {
       ? `git (${effectiveGitRef})`
       : `git (${effectiveGitRef}, default)`;
   } else if (version) {
-    // Use specific PyPI version: uvx --from openhands-agent-server==version agent-server
+    // Use specific PyPI version: uvx --from suricate-agent-server==version agent-server
     // The package name differs from the executable name, so we need --from syntax
     // Pin all SDK packages to the same version for consistency
     uvxArgs.push(
       "--from",
       `${DEFAULT_AGENT_SERVER_PACKAGE}==${version}`,
       "--with",
-      `openhands-sdk==${version}`,
+      `suricate-sdk==${version}`,
       "--with",
-      `openhands-tools==${version}`,
+      `suricate-tools==${version}`,
       "--with",
-      `openhands-workspace==${version}`,
+      `suricate-workspace==${version}`,
     );
     if (AGENT_CLIENT_PROTOCOL_CONSTRAINT) {
       uvxArgs.push("--with", AGENT_CLIENT_PROTOCOL_CONSTRAINT);

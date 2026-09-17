@@ -64,6 +64,20 @@ const projectRoot = app.isPackaged ? __dirname : join(__dirname, "..");
 const buildDir = join(projectRoot, "build");
 const scriptsDir = join(projectRoot, "scripts");
 
+// Dev-only: mirror `node --env-file-if-exists=.env` used by npm run scripts so
+// OH_AGENT_SERVER_LOCAL_PATH / OH_AGENT_SERVER_GIT_REF from the repo .env reach
+// the spawned agent-server (needed for unreleased APIs like /api/git/blame).
+if (!app.isPackaged) {
+  const envPath = join(projectRoot, ".env");
+  if (existsSync(envPath) && typeof process.loadEnvFile === "function") {
+    try {
+      process.loadEnvFile(envPath);
+    } catch (error) {
+      console.warn("[desktop] Failed to load .env:", error);
+    }
+  }
+}
+
 // OpenHands raised-hands app icon, used as the BrowserWindow.icon option.
 // Windows gets the multi-size icon.ico (16→256, small sizes as classic BMP
 // entries — the Windows shell needs those); Linux uses the 1024×1024 PNG
@@ -253,7 +267,7 @@ async function waitForUrl(url, timeoutMs = 120_000, intervalMs = 600) {
  * serving requests, not just that the ingress proxy is up.
  *
  * On first launch, `uvx` has to download a Python toolchain and install
- * `openhands-agent-server` and its workspace deps from PyPI, which can
+ * `suricate-agent-server` and its workspace deps from PyPI, which can
  * easily take a few minutes on a slow network. We poll the route end-to-end
  * (through the allocated ingress origin, so a missing or restarted ingress
  * is also caught) instead of just probing the static-server fallback that

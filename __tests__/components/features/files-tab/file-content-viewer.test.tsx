@@ -1,7 +1,7 @@
 import React from "react";
 import { render, screen } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { FileContentViewer } from "#/components/features/files-tab/file-content-viewer";
 import type { ViewMode } from "#/components/features/files-tab/view-mode";
@@ -37,18 +37,16 @@ vi.mock("#/api/backend-registry/active-store", () => ({
   getActiveBackend: () => getActiveBackendMock(),
 }));
 
-// The hook statically imports the cloud runtime service; stub the module so
-// this local-path test never loads the real cloud/proxy machinery. The test
-// uses the fetch (local) path, so downloadFile is never called or asserted.
+const downloadFileMock = vi.fn();
 vi.mock("#/api/runtime-service/agent-server-runtime-service", () => ({
-  default: { downloadFile: vi.fn() },
+  default: {
+    downloadFile: (...args: unknown[]) => downloadFileMock(...args),
+  },
 }));
 
 vi.mock("@monaco-editor/react", () => ({
   Editor: () => <div data-testid="monaco-editor" />,
 }));
-
-const fetchMock = vi.fn();
 
 const BASE_URL =
   "https://agent.example.com/api/conversations/conv-1/workspace/";
@@ -70,8 +68,7 @@ function renderViewer(
 
 describe("FileContentViewer", () => {
   beforeEach(() => {
-    vi.stubGlobal("fetch", fetchMock);
-    fetchMock.mockReset();
+    downloadFileMock.mockReset();
     useWorkspaceSessionMock.mockReset();
     useActiveConversationMock.mockReset();
     useRuntimeIsReadyMock.mockReset();
@@ -83,6 +80,7 @@ describe("FileContentViewer", () => {
         id: "conv-1",
         conversation_url: "https://agent.example.com/api/conversations/conv-1",
         session_api_key: "session-key",
+        workspace: { working_dir: "/workspace/project" },
       },
     });
     useWorkspaceSessionMock.mockReturnValue({
@@ -98,26 +96,17 @@ describe("FileContentViewer", () => {
     useWorkspaceMutationCounter.setState({ count: 0 });
   });
 
-  afterEach(() => {
-    vi.unstubAllGlobals();
-  });
-
   // The acceptance criteria require the clear message in BOTH view modes. The
   // plain-mode fallback and the rich-mode binary branch both route through
   // UnpreviewableFallback, so one parametrized spec covers both code paths.
   it.each(["rich", "plain"] as const)(
     "shows a clear unsupported-document message for an Office file (.pptx) in %s mode",
     async (viewMode) => {
-      // Arrange: the workspace fileserver returns real .pptx bytes — a ZIP whose
+      // Arrange: header-auth download returns real .pptx bytes — a ZIP whose
       // header carries a NUL, so the hook classifies the file as binary.
-      fetchMock.mockResolvedValue({
-        ok: true,
-        status: 200,
-        arrayBuffer: () =>
-          Promise.resolve(
-            new Uint8Array([0x50, 0x4b, 0x03, 0x04, 0x00]).buffer,
-          ),
-      });
+      downloadFileMock.mockResolvedValue(
+        new Uint8Array([0x50, 0x4b, 0x03, 0x04, 0x00]).buffer,
+      );
 
       // Act
       renderViewer("demo.pptx", viewMode);
@@ -133,12 +122,9 @@ describe("FileContentViewer", () => {
   it.each(["rich", "plain"] as const)(
     "uses a read-only highlighter instead of Monaco when editable is false in %s mode",
     async (viewMode) => {
-      fetchMock.mockResolvedValue({
-        ok: true,
-        status: 200,
-        arrayBuffer: () =>
-          Promise.resolve(new TextEncoder().encode("const x = 1;\n").buffer),
-      });
+      downloadFileMock.mockResolvedValue(
+        new TextEncoder().encode("const x = 1;\n").buffer,
+      );
 
       renderViewer("app.ts", viewMode, false);
 
@@ -152,17 +138,34 @@ describe("FileContentViewer", () => {
   );
 
   it("mounts Monaco for editable source files", async () => {
-    fetchMock.mockResolvedValue({
-      ok: true,
-      status: 200,
-      arrayBuffer: () =>
-        Promise.resolve(new TextEncoder().encode("const x = 1;\n").buffer),
-    });
+    downloadFileMock.mockResolvedValue(
+      new TextEncoder().encode("const x = 1;\n").buffer,
+    );
 
     renderViewer("app.ts", "rich", true);
 
     expect(
       await screen.findByTestId("editable-source-view"),
     ).toBeInTheDocument();
+  });
+
+  it("shows loading instead of a load error while content is still pending", () => {
+    // Keep the query permanently pending by never resolving downloadFile and
+    // also withholding the workspace session — the viewer must not flash
+    // FILES$LOAD_ERROR for an incomplete request.
+    useWorkspaceSessionMock.mockReturnValue({
+      data: null,
+      isLoading: true,
+      isError: false,
+      error: null,
+    });
+    downloadFileMock.mockReturnValue(new Promise(() => {}));
+
+    renderViewer("pending.ts", "plain");
+
+    expect(screen.getByText("FILES$LOADING_FILES")).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("file-content-viewer-error"),
+    ).not.toBeInTheDocument();
   });
 });

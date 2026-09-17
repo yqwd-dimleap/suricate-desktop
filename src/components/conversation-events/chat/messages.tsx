@@ -12,6 +12,10 @@ import { ConversationConfirmationCard } from "#/components/shared/buttons/conver
 import { useAgentState } from "#/hooks/use-agent-state";
 import { useEventMessageStore } from "#/stores/event-message-store";
 import { AgentState } from "#/types/agent-state";
+import { AgentInterimStatus } from "./agent-interim-status";
+import { shouldShowAgentInterimStatus } from "./should-show-agent-interim-status";
+import { isStreamingDeltaEvent } from "#/types/agent-server/type-guards";
+import { useReasoningStreamActive } from "#/hooks/use-reasoning-stream-active";
 
 interface MessagesProps {
   messages: OpenHandsEvent[]; // UI events (actions replaced by observations)
@@ -73,6 +77,25 @@ export const Messages: React.FC<MessagesProps> = React.memo(
           submittedEventIds,
         }),
       [messages, allEvents, awaitingConfirmation, submittedEventIds],
+    );
+
+    const lastMessage = messages.at(-1);
+    const isTrailingDelta =
+      lastMessage !== undefined && isStreamingDeltaEvent(lastMessage);
+    const streamFingerprint = isTrailingDelta
+      ? `${lastMessage.reasoning_content ?? ""}\u0000${lastMessage.content ?? ""}`
+      : "";
+    const isTextStreamActive = useReasoningStreamActive(
+      streamFingerprint,
+      isTrailingDelta &&
+        (curAgentState === AgentState.RUNNING ||
+          curAgentState === AgentState.LOADING),
+    );
+
+    const showInterimStatus = shouldShowAgentInterimStatus(
+      curAgentState,
+      lastMessage,
+      { isTextStreamActive },
     );
 
     const renderEventMessage = (
@@ -155,6 +178,7 @@ export const Messages: React.FC<MessagesProps> = React.memo(
             </React.Fragment>
           );
         })}
+        {showInterimStatus ? <AgentInterimStatus /> : null}
       </>
     );
   },

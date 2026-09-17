@@ -484,9 +484,45 @@ describe("AgentServerConversationService", () => {
       const payload = payloadCall[1] as {
         workspace: { working_dir: string };
         worktree: boolean;
+        agent_settings?: {
+          agent_context?: { system_message_suffix?: string };
+        };
       };
       expect(payload.workspace.working_dir).toBe("/Users/jane/projects/foo");
       expect(payload.worktree).toBe(false);
+      expect(
+        payload.agent_settings?.agent_context?.system_message_suffix ?? "",
+      ).not.toContain("<WORKSPACE_STATUS>");
+    });
+
+    it("appends WORKSPACE_STATUS when no workspace is attached", async () => {
+      mockGetSettings.mockResolvedValue({
+        agent_settings: { llm: { model: "gpt-4o" } },
+        conversation_settings: {},
+      });
+      mockGetSettingsForConversation.mockResolvedValue({
+        agentSettings: { llm: { model: "gpt-4o" } },
+        conversationSettings: {},
+        secretsEncrypted: true,
+      });
+      mockHttpPost.mockResolvedValue({
+        data: {
+          id: "ignored-server-id",
+          created_at: "2024-01-01",
+          updated_at: "2024-01-01",
+        },
+      });
+
+      await AgentServerConversationService.createConversation();
+
+      const payload = mockHttpPost.mock.calls[0][1] as {
+        agent_settings?: {
+          agent_context?: { system_message_suffix?: string };
+        };
+      };
+      expect(
+        payload.agent_settings?.agent_context?.system_message_suffix,
+      ).toContain("<WORKSPACE_STATUS>");
     });
 
     // Regression for #16907 — the conversation's own `<workspace>/<hex>` dir

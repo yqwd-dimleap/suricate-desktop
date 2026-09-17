@@ -5,6 +5,7 @@ import { buildHttpBaseUrl } from "#/utils/websocket-url";
 import type {
   GitChange,
   GitChangeDiff,
+  GitBlameLine,
   GitCommitsPage,
 } from "../open-hands.types";
 import { getActiveBackend } from "../backend-registry/active-store";
@@ -28,6 +29,14 @@ interface AgentServerGitCommit {
 interface AgentServerGitCommitsPage {
   commits: AgentServerGitCommit[];
   has_more: boolean;
+}
+
+interface AgentServerGitBlameLine {
+  line: number;
+  sha: string;
+  author: string;
+  author_time: string;
+  summary?: string;
 }
 
 /**
@@ -192,6 +201,41 @@ class AgentServerGitService {
         })),
         hasMore: Boolean(page?.has_more),
       };
+    } catch (error) {
+      if (isEndpointMissingError(error)) return null;
+      throw error;
+    }
+  }
+
+  /**
+   * Per-line git blame for a single file.
+   * Resolves to `null` when the agent server predates `/api/git/blame` (404),
+   * so callers can hide Annotate context-menu actions instead of erroring.
+   */
+  static async getGitBlame(
+    conversationUrl: string | null | undefined,
+    sessionApiKey: string | null | undefined,
+    path: string,
+  ): Promise<GitBlameLine[] | null> {
+    try {
+      const lines = await getFromRuntime<AgentServerGitBlameLine[]>(
+        conversationUrl,
+        sessionApiKey,
+        "/api/git/blame",
+        { path },
+      );
+      if (!Array.isArray(lines)) {
+        throw new Error(
+          "Invalid response from runtime - runtime may be unavailable",
+        );
+      }
+      return lines.map((line) => ({
+        line: line.line,
+        sha: line.sha,
+        author: line.author,
+        authorTime: line.author_time,
+        summary: line.summary ?? "",
+      }));
     } catch (error) {
       if (isEndpointMissingError(error)) return null;
       throw error;

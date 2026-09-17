@@ -181,13 +181,47 @@ describe("LocalNewConversationMenu", () => {
 
     // Assert
     await waitFor(() => {
-      expect(createSpy).toHaveBeenCalledWith({
-        metadata: null,
-        workingDirOverride: "/workspace/project/repo1",
-      });
+      expect(createSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          workingDirOverride: "/workspace/project/repo1",
+        }),
+      );
     });
     await waitFor(() => {
       expect(navigate).toHaveBeenCalledWith("/conversations/conv-123");
+    });
+  });
+
+  it("passes noWorkspace so empty launches skip last-used auto-attach", async () => {
+    const navigate = vi.fn();
+    const createSpy = vi
+      .spyOn(AgentServerConversationService, "createConversation")
+      .mockResolvedValue(makeStartTask("conv-empty"));
+    renderMenu({
+      workspaces: [
+        {
+          id: "/workspace/project/repo1",
+          name: "repo1",
+          path: "/workspace/project/repo1",
+        },
+      ],
+      navigate,
+    });
+    window.localStorage.setItem(
+      "openhands-last-used-workspace-path",
+      "/workspace/project/repo1",
+    );
+    const user = userEvent.setup();
+
+    await user.click(screen.getByTestId("new-conversation-button"));
+    await user.click(screen.getByTestId("launch-no-workspace"));
+
+    await waitFor(() => {
+      expect(createSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          workingDirOverride: undefined,
+        }),
+      );
     });
   });
 

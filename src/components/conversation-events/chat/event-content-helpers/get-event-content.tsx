@@ -34,6 +34,7 @@ import {
   trimEventTitleText,
   type EventTitleDescriptor,
 } from "./get-action-event-title";
+import { summarizeBashCommand } from "#/utils/summarize-bash-command";
 
 // Helper function to create title from translation key
 const createTitleFromKey = (
@@ -178,14 +179,18 @@ const getObservationEventTitle = (
 
   switch (observationType) {
     case "ExecuteBashObservation":
-    case "TerminalObservation":
-      observationKey = "OBSERVATION_MESSAGE$RUN";
-      observationValues = {
-        command: event.observation.command
-          ? trimEventTitleText(event.observation.command, 80)
-          : "",
-      };
+    case "TerminalObservation": {
+      const intent = summarizeBashCommand(
+        correspondingAction &&
+          (correspondingAction.action.kind === "ExecuteBashAction" ||
+            correspondingAction.action.kind === "TerminalAction")
+          ? correspondingAction.action.command
+          : event.observation.command,
+      );
+      observationKey = intent.observationKey;
+      observationValues = { ...(intent.values ?? {}) };
       break;
+    }
     case "FileEditorObservation":
     case "StrReplaceEditorObservation":
       if (event.observation.command === "view") {

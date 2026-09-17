@@ -118,10 +118,14 @@ export function LocalNewConversationMenu({
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [open, browserOpen, manageOpen]);
 
-  const launch = (workingDir?: string) => {
+  const launch = (workingDir?: string, options?: { noWorkspace?: boolean }) => {
     if (isCreating) return;
     createConversation(
-      { workingDir, entryPoint: "sidebar_local_menu" },
+      {
+        workingDir,
+        noWorkspace: options?.noWorkspace,
+        entryPoint: "sidebar_local_menu",
+      },
       {
         onSuccess: (data) => {
           setOpen(false);
@@ -219,7 +223,7 @@ export function LocalNewConversationMenu({
                 type="button"
                 disabled={isCreating}
                 data-testid="launch-no-workspace"
-                onClick={() => launch()}
+                onClick={() => launch(undefined, { noWorkspace: true })}
                 className={itemClass}
               >
                 <span className="text-[var(--oh-muted)]">

@@ -4,7 +4,7 @@ import { SecurityRisk } from "#/types/agent-server/core";
 import { I18nKey } from "#/i18n/declaration";
 import { CopyableContentWrapper } from "#/components/shared/buttons/copyable-content-wrapper";
 import { defineVisualizer } from "../define";
-import { textFromContent } from "../text-content";
+import { stripSoftWrappedCommandEcho, textFromContent } from "../text-content";
 
 /** Cap the terminal pane so long logs scroll instead of blowing up the chat. */
 const TERMINAL_MAX_HEIGHT_CLASS = "max-h-64";
@@ -22,11 +22,18 @@ export const bashVisualizer = defineVisualizer({
     const command =
       observation?.observation.command ?? action?.action.command ?? "";
     const risk = action?.security_risk;
-    const output = observation
+    const rawOutput = observation
       ? textFromContent(observation.observation.content)
       : "";
+    const output = stripSoftWrappedCommandEcho(rawOutput, command);
     const exitCode = observation?.observation.exit_code;
     const showExitBadge = exitCode != null && exitCode !== 0 && exitCode !== -1;
+    const isErrorObservation =
+      observation?.observation.kind === "TerminalObservation"
+        ? observation.observation.is_error
+        : observation?.observation.kind === "ExecuteBashObservation"
+          ? observation.observation.error
+          : false;
 
     const logText = output.trim()
       ? output
@@ -75,14 +82,28 @@ export const bashVisualizer = defineVisualizer({
           <pre
             ref={scrollRef}
             data-testid="bash-visualizer-terminal"
-            className={`overflow-x-auto overflow-y-auto rounded-lg bg-[var(--oh-surface)] p-3 font-mono text-xs leading-5 text-[var(--oh-foreground)] whitespace-pre-wrap break-words ${TERMINAL_MAX_HEIGHT_CLASS}`}
+            className={`overflow-x-auto overflow-y-auto rounded-lg bg-[var(--oh-surface)] p-3 font-mono text-xs leading-5 whitespace-pre-wrap break-words ${TERMINAL_MAX_HEIGHT_CLASS}`}
           >
             {command ? (
-              <span data-testid="bash-visualizer-command">{command}</span>
+              <span
+                data-testid="bash-visualizer-command"
+                className="text-[var(--oh-foreground)]"
+              >
+                {command}
+              </span>
             ) : null}
             {command && logText ? "\n\n" : null}
             {logText ? (
-              <span data-testid="bash-visualizer-output">{logText}</span>
+              <span
+                data-testid="bash-visualizer-output"
+                className={
+                  isErrorObservation
+                    ? "text-[var(--oh-status-error)]"
+                    : "text-[var(--oh-muted)]"
+                }
+              >
+                {logText}
+              </span>
             ) : null}
           </pre>
         </CopyableContentWrapper>

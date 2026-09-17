@@ -312,14 +312,13 @@ describe("Sidebar", () => {
     expect(sidebar.dataset.collapsed).toBe("false");
   });
 
-  it("shows the version tile above the backend selector when expanded", () => {
+  it("does not render the version tile in the sidebar footer", () => {
     renderSidebar("/conversations");
 
-    const versionTile = screen.getByTestId("agent-canvas-version-tile");
-    const backendSelector = screen.getByTestId("backend-selector");
-    expect(versionTile.compareDocumentPosition(backendSelector)).toBe(
-      Node.DOCUMENT_POSITION_FOLLOWING,
-    );
+    expect(
+      screen.queryByTestId("agent-canvas-version-tile"),
+    ).not.toBeInTheDocument();
+    expect(screen.getByTestId("backend-selector")).toBeInTheDocument();
   });
 
   it("hides the version tile when the sidebar is collapsed", () => {
@@ -463,21 +462,13 @@ describe("Sidebar", () => {
     }
   });
 
-  it("renders the Getting Started checklist above the bottom backend bar", () => {
+  it("does not render the Getting Started checklist in the sidebar", () => {
     renderSidebar("/conversations");
 
-    const automations = screen.getByTestId("sidebar-automations-link");
-    const checklist = screen.getByTestId("sidebar-onboarding-checklist");
-    const backendBar = screen.getByTestId("backend-selector");
-
     expect(
-      automations.compareDocumentPosition(checklist) &
-        Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
-    expect(
-      checklist.compareDocumentPosition(backendBar) &
-        Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
+      screen.queryByTestId("sidebar-onboarding-checklist"),
+    ).not.toBeInTheDocument();
+    expect(screen.getByTestId("backend-selector")).toBeInTheDocument();
   });
 
   it("renders icons for every top-level nav item so they remain meaningful in the collapsed rail", () => {

@@ -9,11 +9,16 @@ import {
 import { I18nKey } from "#/i18n/declaration";
 import { getEventContent } from "../event-content-helpers/get-event-content";
 import {
+  getActionEventTitleDescriptor,
+  resolveEventTitlePlainText,
+} from "../event-content-helpers/get-action-event-title";
+import {
   hasEventGroupActivityParts,
   summarizeEventGroupActivity,
 } from "../event-content-helpers/summarize-event-group-activity";
 import { IsInEventGroupContext } from "../../../features/chat/is-in-event-group-context";
 import { PathInteractiveContext } from "../../../features/chat/path-component";
+import { TextShimmer } from "#/components/shared/text-shimmer";
 
 interface EventGroupProps {
   /** The events represented by this group. Used to compute the summary. */
@@ -88,7 +93,10 @@ export function EventGroup({
   let latestTitle: React.ReactNode = null;
   if (latestEvent) {
     if (isActionEvent(latestEvent)) {
-      latestTitle = getEventContent(latestEvent).title;
+      latestTitle = resolveEventTitlePlainText(
+        getActionEventTitleDescriptor(latestEvent),
+        (key, values) => t(key, values),
+      );
     } else if (isObservationEvent(latestEvent)) {
       const lookupSource = allEvents ?? events;
       const correspondingAction = lookupSource.find(
@@ -154,7 +162,19 @@ export function EventGroup({
             <span className="flex min-w-0 items-center gap-2 font-normal text-[var(--oh-muted)]">
               <span className="truncate">
                 <PathInteractiveContext.Provider value={false}>
-                  {latestTitle ?? countSummary}
+                  {typeof latestTitle === "string" ? (
+                    <TextShimmer
+                      as="span"
+                      className="text-sm"
+                      duration={2.2}
+                      spread={2}
+                      data-testid="event-group-live-title"
+                    >
+                      {latestTitle}
+                    </TextShimmer>
+                  ) : (
+                    (latestTitle ?? countSummary)
+                  )}
                 </PathInteractiveContext.Provider>
               </span>
               <Chevron className="h-4 w-4 flex-shrink-0" aria-hidden />

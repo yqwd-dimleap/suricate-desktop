@@ -80,7 +80,7 @@ OH_AGENT_SERVER_GIT_REF=abc1234 npm run dev
 OH_AGENT_SERVER_VERSION=1.18.0 npm run dev
 ```
 
-`OH_AGENT_SERVER_LOCAL_PATH` must be an absolute path to a `software-agent-sdk` checkout containing the `openhands-agent-server`, `openhands-sdk`, `openhands-tools`, and `openhands-workspace` workspace packages. The agent-server itself is rebuilt from local source on each start (`uvx --reinstall`); the other workspace packages are installed editable, so their source changes take effect without a rebuild.
+`OH_AGENT_SERVER_LOCAL_PATH` must be an absolute path to a `software-agent-sdk` checkout containing the `suricate-agent-server`, `suricate-sdk`, `suricate-tools`, and `suricate-workspace` workspace packages. The agent-server itself is rebuilt from local source on each start (`uvx --reinstall`); the other workspace packages are installed editable, so their source changes take effect without a rebuild.
 
 ### Other useful overrides
 

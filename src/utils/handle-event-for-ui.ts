@@ -1,12 +1,19 @@
 import {
   ActionEvent,
+  AgentErrorEvent,
   ImageContent,
+  ObservationEvent,
   OpenHandsEvent,
   TextContent,
 } from "#/types/agent-server/core";
 import {
+  ExecuteBashObservation,
+  TerminalObservation,
+} from "#/types/agent-server/core/base/observation";
+import {
   isACPToolCallEvent,
   isActionEvent,
+  isAgentErrorEvent,
   isMessageEvent,
   isObservationEvent,
   isStreamingDeltaEvent,
@@ -16,6 +23,80 @@ import {
   getReasoningContent,
   splitInlineThink,
 } from "#/components/conversation-events/chat/event-thought-helpers";
+
+const EMPTY_CMD_METADATA = {
+  exit_code: 1,
+  pid: -1,
+  username: null,
+  hostname: null,
+  working_dir: null,
+  py_interpreter_path: null,
+  prefix: "",
+  suffix: "",
+} as const;
+
+/**
+ * When a terminal/bash action is interrupted (pause, cancel, crash recovery),
+ * the SDK emits an `AgentErrorEvent` instead of a normal observation. Replace
+ * the still-pending action card with a synthetic observation so the bash
+ * visualizer can show the error in the log pane instead of an empty terminal.
+ */
+export const createSyntheticBashObservationFromAgentError = (
+  action: ActionEvent,
+  errorEvent: AgentErrorEvent,
+): ObservationEvent<ExecuteBashObservation | TerminalObservation> | null => {
+  const { kind } = action.action;
+  if (kind !== "ExecuteBashAction" && kind !== "TerminalAction") {
+    return null;
+  }
+
+  const command = action.action.command ?? "";
+  const content: TextContent[] = [
+    { type: "text", text: errorEvent.error, cache_prompt: false },
+  ];
+  const toolName = action.tool_name ?? "terminal";
+  const toolCallId = action.tool_call_id ?? errorEvent.id ?? action.id;
+  const eventId = errorEvent.id ?? action.id;
+  const eventTimestamp = errorEvent.timestamp ?? new Date().toISOString();
+
+  if (kind === "TerminalAction") {
+    return {
+      id: eventId,
+      timestamp: eventTimestamp,
+      source: "environment",
+      tool_name: toolName,
+      tool_call_id: toolCallId,
+      action_id: action.id,
+      observation: {
+        kind: "TerminalObservation",
+        content,
+        command,
+        exit_code: null,
+        is_error: true,
+        timeout: false,
+        metadata: { ...EMPTY_CMD_METADATA },
+      },
+    };
+  }
+
+  return {
+    id: eventId,
+    timestamp: eventTimestamp,
+    source: "environment",
+    tool_name: toolName,
+    tool_call_id: toolCallId,
+    action_id: action.id,
+    observation: {
+      kind: "ExecuteBashObservation",
+      content,
+      command,
+      exit_code: null,
+      error: true,
+      timeout: false,
+      metadata: { ...EMPTY_CMD_METADATA },
+    },
+  };
+};
 
 export const mergeStreamingDeltaEvent = (
   incoming: StreamingDeltaEvent,
@@ -412,6 +493,32 @@ export const handleEventForUI = (
     } else {
       newUiEvents.push(event);
     }
+    return newUiEvents;
+  }
+
+  // Orphaned terminal/bash actions get an AgentErrorEvent (interrupt/pause)
+  // instead of an observation. Fold the error into the action card so the
+  // terminal pane shows why there is no stdout, and skip the duplicate
+  // standalone error banner for that tool call.
+  if (isAgentErrorEvent(event)) {
+    const actionIndex = newUiEvents.findIndex(
+      (uiEvent) =>
+        isActionEvent(uiEvent) && uiEvent.tool_call_id === event.tool_call_id,
+    );
+    if (actionIndex !== -1) {
+      const actionEvent = newUiEvents[actionIndex];
+      if (isActionEvent(actionEvent)) {
+        const synthetic = createSyntheticBashObservationFromAgentError(
+          actionEvent,
+          event,
+        );
+        if (synthetic) {
+          newUiEvents[actionIndex] = synthetic;
+          return newUiEvents;
+        }
+      }
+    }
+    newUiEvents.push(event);
     return newUiEvents;
   }
 

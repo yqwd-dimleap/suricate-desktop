@@ -1021,4 +1021,109 @@ describe("handleEventForUI", () => {
       expect(result).toEqual([mockMessageEvent, planningDelta, action]);
     });
   });
+
+  describe("AgentErrorEvent for orphaned terminal/bash actions", () => {
+    const terminalAction: ActionEvent = {
+      id: "terminal-action-1",
+      timestamp: "2024-01-01T00:00:01Z",
+      source: "agent",
+      thought: [],
+      thinking_blocks: [],
+      action: {
+        kind: "TerminalAction",
+        command: "du -sh .",
+        is_input: false,
+        timeout: null,
+        reset: false,
+      },
+      tool_name: "terminal",
+      tool_call_id: "call_terminal_1",
+      tool_call: {
+        id: "call_terminal_1",
+        type: "function",
+        function: {
+          name: "terminal",
+          arguments: '{"command": "du -sh ."}',
+        },
+      },
+      llm_response_id: "response_terminal_1",
+      security_risk: SecurityRisk.UNKNOWN,
+    };
+
+    const interruptError = {
+      id: "error-1",
+      timestamp: "2024-01-01T00:00:02Z",
+      source: "agent" as const,
+      kind: "AgentErrorEvent" as const,
+      tool_name: "terminal",
+      tool_call_id: "call_terminal_1",
+      error: "Tool call interrupted before completion. The conversation was paused.",
+      classification: {
+        kind: "agent_action" as const,
+        retryable: true,
+        user_action: "retry" as const,
+      },
+    };
+
+    it("replaces a pending TerminalAction with a synthetic error observation", () => {
+      const result = handleEventForUI(interruptError as OpenHandsEvent, [
+        terminalAction,
+      ]);
+
+      expect(result).toHaveLength(1);
+      const [event] = result;
+      expect(event).toMatchObject({
+        id: "error-1",
+        action_id: "terminal-action-1",
+        tool_call_id: "call_terminal_1",
+        observation: {
+          kind: "TerminalObservation",
+          command: "du -sh .",
+          is_error: true,
+          content: [
+            {
+              type: "text",
+              text: interruptError.error,
+            },
+          ],
+        },
+      });
+    });
+
+    it("keeps a standalone AgentErrorEvent when no matching action is present", () => {
+      const result = handleEventForUI(interruptError as OpenHandsEvent, [
+        mockMessageEvent,
+      ]);
+
+      expect(result).toEqual([mockMessageEvent, interruptError]);
+    });
+
+    it("keeps a standalone AgentErrorEvent for non-terminal tools", () => {
+      const fileAction: ActionEvent = {
+        ...mockActionEvent,
+        id: "file-action-1",
+        tool_call_id: "call_file_1",
+        tool_name: "file_editor",
+        action: {
+          kind: "FileEditorAction",
+          command: "view",
+          path: "/tmp/a.py",
+          file_text: null,
+          old_str: null,
+          new_str: null,
+          insert_line: null,
+          view_range: null,
+        },
+      };
+      const fileError = {
+        ...interruptError,
+        tool_name: "file_editor",
+        tool_call_id: "call_file_1",
+      };
+
+      const result = handleEventForUI(fileError as OpenHandsEvent, [fileAction]);
+
+      expect(result).toEqual([fileAction, fileError]);
+    });
+  });
 });

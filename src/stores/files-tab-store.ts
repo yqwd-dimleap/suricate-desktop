@@ -35,6 +35,17 @@ interface FilesTabState {
    * Revert or the path is no longer dirty vs HEAD (committed / pushed clean).
    */
   stickyReveals: Record<string, StickyRevealRange>;
+  /**
+   * Session-only Git Blame annotate mode for the Files Monaco editor.
+   * Toggled from the editor context menu (Annotate with Git Blame /
+   * Close Annotations). Not persisted.
+   */
+  isAnnotateEnabled: boolean;
+  /**
+   * True once `/api/git/blame` 404'd for this session (old agent-server).
+   * Hides the Annotate context-menu actions.
+   */
+  isAnnotateUnsupported: boolean;
   setSelectedPath: (
     path: string | null,
     conversationId?: string | null,
@@ -44,6 +55,8 @@ interface FilesTabState {
   setStickyReveal: (path: string, reveal: FileRevealRange) => void;
   clearStickyReveal: (path: string) => void;
   clearAllStickyReveals: () => void;
+  setAnnotateEnabled: (enabled: boolean) => void;
+  setAnnotateUnsupported: (unsupported: boolean) => void;
   /** Remove a path from the open-tab strip; selects a neighbor when needed. */
   closeOpenPath: (path: string) => void;
   /**
@@ -125,6 +138,8 @@ export const useFilesTabStore = create<FilesTabState>((set) => ({
   selectedConversationId: null,
   openPaths: [],
   stickyReveals: {},
+  isAnnotateEnabled: false,
+  isAnnotateUnsupported: false,
   setSelectedPath: (selectedPath, conversationId = null, options) =>
     set((state) => {
       if (selectedPath === null) {
@@ -177,6 +192,12 @@ export const useFilesTabStore = create<FilesTabState>((set) => ({
       return { stickyReveals };
     }),
   clearAllStickyReveals: () => set({ stickyReveals: {} }),
+  setAnnotateEnabled: (isAnnotateEnabled) => set({ isAnnotateEnabled }),
+  setAnnotateUnsupported: (isAnnotateUnsupported) =>
+    set({
+      isAnnotateUnsupported,
+      ...(isAnnotateUnsupported ? { isAnnotateEnabled: false } : {}),
+    }),
   closeOpenPath: (path) =>
     set((state) => {
       if (!state.openPaths.includes(path)) return state;

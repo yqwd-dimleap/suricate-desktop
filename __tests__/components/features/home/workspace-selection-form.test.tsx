@@ -162,6 +162,7 @@ describe("WorkspaceSelectionForm (server-backed workspaces)", () => {
     mockSearchSubdirectories.mockReset();
     mockGetHome.mockReset();
     window.sessionStorage.clear();
+    window.localStorage.clear();
     mockUseIsCreatingConversation.mockReturnValue(false);
     mockGetHome.mockResolvedValue({ home: "/Users/me" });
     // useResolvedWorkspaces always queries an implicit `/projects` parent in
@@ -284,6 +285,10 @@ describe("WorkspaceSelectionForm (server-backed workspaces)", () => {
   });
 
   it("clears a persisted workspace path that is no longer resolved", async () => {
+    window.localStorage.setItem(
+      "openhands-last-used-workspace-path",
+      "/Users/me/dev/missing",
+    );
     window.sessionStorage.setItem(
       HOME_SELECTED_WORKSPACE_PATH_KEY,
       "/Users/me/dev/missing",
@@ -304,6 +309,9 @@ describe("WorkspaceSelectionForm (server-backed workspaces)", () => {
         window.sessionStorage.getItem(HOME_SELECTED_WORKSPACE_PATH_KEY),
       ).toBeNull(),
     );
+    expect(
+      window.localStorage.getItem("openhands-last-used-workspace-path"),
+    ).toBeNull();
     expect(screen.getByTestId("workspace-dropdown")).toHaveValue("");
     expect(screen.getByTestId("workspace-launch-button")).toBeDisabled();
   });

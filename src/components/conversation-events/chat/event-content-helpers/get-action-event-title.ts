@@ -1,6 +1,7 @@
 import { CANVAS_UI_CLIENT_ACTION_KIND } from "#/constants/canvas-ui";
 import { LAUNCH_CHILD_CONVERSATION_ACTION_KIND } from "#/constants/child-conversation";
 import type { ActionEvent } from "#/types/agent-server/core";
+import { summarizeBashCommand } from "#/utils/summarize-bash-command";
 
 export type EventTitleDescriptor =
   | {
@@ -38,12 +39,14 @@ export const getActionEventTitleDescriptor = (
 
   switch (actionType) {
     case "ExecuteBashAction":
-    case "TerminalAction":
+    case "TerminalAction": {
+      const intent = summarizeBashCommand(event.action.command);
       return {
         kind: "translation",
-        key: "ACTION_MESSAGE$RUN",
-        values: { command: trimEventTitleText(event.action.command, 80) },
+        key: intent.actionKey,
+        values: intent.values ?? {},
       };
+    }
     case "FileEditorAction":
     case "StrReplaceEditorAction": {
       const key =
@@ -144,4 +147,15 @@ export const getActionEventTitleDescriptor = (
         text: String(actionType).replace("Action", "").toUpperCase(),
       };
   }
+};
+
+/** Plain-text title for shimmer / aria (resolves i18n keys). */
+export const resolveEventTitlePlainText = (
+  descriptor: EventTitleDescriptor,
+  translate: (key: string, values?: Record<string, unknown>) => string,
+): string => {
+  if (descriptor.kind === "text") {
+    return descriptor.text;
+  }
+  return translate(descriptor.key, { ...descriptor.values });
 };

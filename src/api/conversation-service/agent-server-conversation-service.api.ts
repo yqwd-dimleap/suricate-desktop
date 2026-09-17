@@ -49,6 +49,10 @@ import {
 } from "../agent-server-adapter";
 import { GetVSCodeUrlResponse } from "../open-hands.types";
 import {
+  appendSystemMessageSuffixToStartPayload,
+  UNATTACHED_WORKSPACE_SYSTEM_SUFFIX,
+} from "#/utils/unattached-workspace-suffix";
+import {
   getAgentServerClientOptions,
   NoBackendAvailableError,
 } from "../agent-server-client-options";
@@ -515,7 +519,7 @@ class AgentServerConversationService {
       workspaceMode ?? (workingDirOverride ? "local_repo" : "new_worktree");
 
     // Use encrypted settings to avoid exposing secrets in the browser
-    const payload = await buildStartConversationRequestWithEncryptedSettings({
+    let payload = await buildStartConversationRequestWithEncryptedSettings({
       settings,
       query: initialUserMsg,
       conversationInstructions,
@@ -533,6 +537,17 @@ class AgentServerConversationService {
       agentProfileKind,
       titleLlmProfile,
     });
+
+    // Empty per-conversation sandboxes are not the user's project — steer the
+    // agent away from git archaeology until a real workspace is attached.
+    // Profile-id launches omit agent_settings and skip this client enrichment;
+    // the SDK system prompt covers that path.
+    if (!workingDirOverride) {
+      payload = appendSystemMessageSuffixToStartPayload(
+        payload as Record<string, unknown>,
+        UNATTACHED_WORKSPACE_SYSTEM_SUFFIX,
+      ) as typeof payload;
+    }
 
     const telemetryDistinctId = await getTelemetryDistinctId();
     const data = await new ConversationClient(

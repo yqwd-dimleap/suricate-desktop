@@ -491,13 +491,13 @@ describe("buildAgentServerCommand", () => {
     expect(cmd.args).toEqual([
       "--reinstall",
       "--from",
-      "git+https://github.com/yqwd-dimleap/suricate-sdk@v0.0.1-rc#subdirectory=openhands-agent-server",
+      "git+https://github.com/yqwd-dimleap/suricate-sdk@v0.0.1-rc#subdirectory=suricate-agent-server",
       "--with",
-      "git+https://github.com/yqwd-dimleap/suricate-sdk@v0.0.1-rc#subdirectory=openhands-sdk",
+      "git+https://github.com/yqwd-dimleap/suricate-sdk@v0.0.1-rc#subdirectory=suricate-sdk",
       "--with",
-      "git+https://github.com/yqwd-dimleap/suricate-sdk@v0.0.1-rc#subdirectory=openhands-tools",
+      "git+https://github.com/yqwd-dimleap/suricate-sdk@v0.0.1-rc#subdirectory=suricate-tools",
       "--with",
-      "git+https://github.com/yqwd-dimleap/suricate-sdk@v0.0.1-rc#subdirectory=openhands-workspace",
+      "git+https://github.com/yqwd-dimleap/suricate-sdk@v0.0.1-rc#subdirectory=suricate-workspace",
       "--with",
       "posthog>=6,<7",
       "agent-server",
@@ -511,17 +511,17 @@ describe("buildAgentServerCommand", () => {
     const cmd = buildAgentServerCommand({ OH_AGENT_SERVER_VERSION: "1.18.0" });
 
     expect(cmd.command).toBe("uvx");
-    // Uses --from syntax because executable name (agent-server) differs from package name (openhands-agent-server)
+    // Uses --from syntax because executable name (agent-server) differs from package name (suricate-agent-server)
     // All SDK packages are pinned to the same version
     expect(cmd.args).toEqual([
       "--from",
-      "openhands-agent-server==1.18.0",
+      "suricate-agent-server==1.18.0",
       "--with",
-      "openhands-sdk==1.18.0",
+      "suricate-sdk==1.18.0",
       "--with",
-      "openhands-tools==1.18.0",
+      "suricate-tools==1.18.0",
       "--with",
-      "openhands-workspace==1.18.0",
+      "suricate-workspace==1.18.0",
       "--with",
       "agent-client-protocol<0.11",
       "--with",
@@ -542,13 +542,13 @@ describe("buildAgentServerCommand", () => {
     expect(cmd.args).toEqual([
       "--reinstall",
       "--from",
-      "git+https://github.com/yqwd-dimleap/suricate-sdk@feature-branch#subdirectory=openhands-agent-server",
+      "git+https://github.com/yqwd-dimleap/suricate-sdk@feature-branch#subdirectory=suricate-agent-server",
       "--with",
-      "git+https://github.com/yqwd-dimleap/suricate-sdk@feature-branch#subdirectory=openhands-sdk",
+      "git+https://github.com/yqwd-dimleap/suricate-sdk@feature-branch#subdirectory=suricate-sdk",
       "--with",
-      "git+https://github.com/yqwd-dimleap/suricate-sdk@feature-branch#subdirectory=openhands-tools",
+      "git+https://github.com/yqwd-dimleap/suricate-sdk@feature-branch#subdirectory=suricate-tools",
       "--with",
-      "git+https://github.com/yqwd-dimleap/suricate-sdk@feature-branch#subdirectory=openhands-workspace",
+      "git+https://github.com/yqwd-dimleap/suricate-sdk@feature-branch#subdirectory=suricate-workspace",
       "--with",
       "posthog>=6,<7",
       "agent-server",
@@ -565,13 +565,13 @@ describe("buildAgentServerCommand", () => {
     expect(cmd.args).toEqual([
       "--reinstall",
       "--from",
-      "git+https://github.com/yqwd-dimleap/suricate-sdk@abc1234#subdirectory=openhands-agent-server",
+      "git+https://github.com/yqwd-dimleap/suricate-sdk@abc1234#subdirectory=suricate-agent-server",
       "--with",
-      "git+https://github.com/yqwd-dimleap/suricate-sdk@abc1234#subdirectory=openhands-sdk",
+      "git+https://github.com/yqwd-dimleap/suricate-sdk@abc1234#subdirectory=suricate-sdk",
       "--with",
-      "git+https://github.com/yqwd-dimleap/suricate-sdk@abc1234#subdirectory=openhands-tools",
+      "git+https://github.com/yqwd-dimleap/suricate-sdk@abc1234#subdirectory=suricate-tools",
       "--with",
-      "git+https://github.com/yqwd-dimleap/suricate-sdk@abc1234#subdirectory=openhands-workspace",
+      "git+https://github.com/yqwd-dimleap/suricate-sdk@abc1234#subdirectory=suricate-workspace",
       "--with",
       "posthog>=6,<7",
       "agent-server",
@@ -590,9 +590,9 @@ describe("buildAgentServerCommand", () => {
     expect(cmd.command).toBe("uvx");
     expect(cmd.args).toContain("--from");
     expect(cmd.args).toContain(
-      "git+https://github.com/yqwd-dimleap/suricate-sdk@feature-branch#subdirectory=openhands-agent-server",
+      "git+https://github.com/yqwd-dimleap/suricate-sdk@feature-branch#subdirectory=suricate-agent-server",
     );
-    expect(cmd.args).not.toContain("openhands-agent-server==1.18.0");
+    expect(cmd.args).not.toContain("suricate-agent-server==1.18.0");
   });
 
   it("uses local path with editable workspace packages when OH_AGENT_SERVER_LOCAL_PATH is set", () => {
@@ -603,13 +603,13 @@ describe("buildAgentServerCommand", () => {
     expect(cmd.args).toEqual([
       "--reinstall",
       "--from",
-      path.join(sdk, "openhands-agent-server"),
+      path.join(sdk, "suricate-agent-server"),
       "--with-editable",
-      path.join(sdk, "openhands-sdk"),
+      path.join(sdk, "suricate-sdk"),
       "--with-editable",
-      path.join(sdk, "openhands-tools"),
+      path.join(sdk, "suricate-tools"),
       "--with-editable",
-      path.join(sdk, "openhands-workspace"),
+      path.join(sdk, "suricate-workspace"),
       "--with",
       "posthog>=6,<7",
       "agent-server",
@@ -628,11 +628,11 @@ describe("buildAgentServerCommand", () => {
     });
 
     expect(cmd.source).toBe(`local (${sdk})`);
-    expect(cmd.args).toContain(path.join(sdk, "openhands-agent-server"));
+    expect(cmd.args).toContain(path.join(sdk, "suricate-agent-server"));
     expect(cmd.args).not.toContain(
-      "git+https://github.com/yqwd-dimleap/suricate-sdk@feature-branch#subdirectory=openhands-agent-server",
+      "git+https://github.com/yqwd-dimleap/suricate-sdk@feature-branch#subdirectory=suricate-agent-server",
     );
-    expect(cmd.args).not.toContain("openhands-agent-server==1.18.0");
+    expect(cmd.args).not.toContain("suricate-agent-server==1.18.0");
   });
 
   it("passes --import-modules to the agent-server, after the executable, in every source mode", () => {
@@ -670,10 +670,10 @@ describe("validateLocalAgentServerPath", () => {
     const tmp = mkdtempSync(path.join(tmpdir(), "sdk-"));
     try {
       for (const subdir of [
-        "openhands-agent-server",
-        "openhands-sdk",
-        "openhands-tools",
-        "openhands-workspace",
+        "suricate-agent-server",
+        "suricate-sdk",
+        "suricate-tools",
+        "suricate-workspace",
       ]) {
         mkdirSync(path.join(tmp, subdir));
       }
@@ -692,12 +692,12 @@ describe("validateLocalAgentServerPath", () => {
   it("throws when a workspace package subdirectory is missing", () => {
     const tmp = mkdtempSync(path.join(tmpdir(), "sdk-"));
     try {
-      mkdirSync(path.join(tmp, "openhands-agent-server"));
-      mkdirSync(path.join(tmp, "openhands-sdk"));
-      mkdirSync(path.join(tmp, "openhands-tools"));
-      // openhands-workspace is intentionally absent
+      mkdirSync(path.join(tmp, "suricate-agent-server"));
+      mkdirSync(path.join(tmp, "suricate-sdk"));
+      mkdirSync(path.join(tmp, "suricate-tools"));
+      // suricate-workspace is intentionally absent
       expect(() => validateLocalAgentServerPath(tmp)).toThrow(
-        /openhands-workspace/,
+        /suricate-workspace/,
       );
     } finally {
       rmSync(tmp, { recursive: true, force: true });

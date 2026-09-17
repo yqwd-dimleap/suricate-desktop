@@ -8,12 +8,17 @@ import { I18nKey } from "#/i18n/declaration";
 import { GenericEventMessage } from "../../../features/chat/generic-event-message";
 import { getEventContent } from "../event-content-helpers/get-event-content";
 import {
+  getActionEventTitleDescriptor,
+  resolveEventTitlePlainText,
+} from "../event-content-helpers/get-action-event-title";
+import {
   getACPToolCallResult,
   getObservationResult,
   ObservationResultStatus,
 } from "../event-content-helpers/get-observation-result";
 import {
   isACPToolCallEvent,
+  isActionEvent,
   isObservationEvent,
 } from "#/types/agent-server/type-guards";
 import {
@@ -28,6 +33,9 @@ import {
   isMarkdownFilePath,
   isMarkdownFileEditorEvent,
 } from "#/components/features/chat/tool-visualizers/primitives/markdown-file-preview";
+import { TextShimmer } from "#/components/shared/text-shimmer";
+import { useTranslation } from "react-i18next";
+import React from "react";
 
 interface GenericEventMessageWrapperProps {
   event: OpenHandsEvent | SkillReadyEvent;
@@ -103,6 +111,7 @@ export function GenericEventMessageWrapper({
   event,
   correspondingAction,
 }: GenericEventMessageWrapperProps) {
+  const { t } = useTranslation("openhands");
   const { title, details } = getEventContent(event, correspondingAction);
 
   // TaskTrackerObservation has its own rendering
@@ -148,10 +157,31 @@ export function GenericEventMessageWrapper({
     !isSkillReadyEvent(event) &&
     isMarkdownFileEditorEvent(event, correspondingAction);
 
+  // In-flight tool rows use the Cursor-style sweep so "what's happening now"
+  // is visually distinct from settled observation titles.
+  let displayTitle: React.ReactNode = title;
+  if (!isSkillReadyEvent(event) && isActionEvent(event)) {
+    const plain = resolveEventTitlePlainText(
+      getActionEventTitleDescriptor(event),
+      (key, values) => t(key, values),
+    );
+    displayTitle = (
+      <TextShimmer
+        as="span"
+        className="text-sm"
+        duration={2.2}
+        spread={2}
+        data-testid="in-progress-event-title"
+      >
+        {plain}
+      </TextShimmer>
+    );
+  }
+
   return (
     <div>
       <GenericEventMessage
-        title={title}
+        title={displayTitle}
         details={bodyDetails}
         success={success}
         initiallyExpanded={initiallyExpanded}

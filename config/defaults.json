@@ -14,7 +14,7 @@
     "minimumAgentServer": "1.28.0"
   },
   "constraints": {
-    "_comment": "Temporary upper bound on the agent-client-protocol (acp) transitive dependency. openhands-sdk 1.35.0 requires agent-client-protocol>=0.10.1 with no upper bound, but acp 0.11.0 reordered the ACP prompt() arguments and breaks the SDK's ACP client (a PromptRequest validation error surfaces as 'ACP error: 2 validation errors for PromptRequest'). Pin acp <0.11 until a fixed openhands-sdk ships. Consumed by scripts/dev-safe.mjs (agent-server uvx install) and .github/workflows/mock-llm-e2e.yml (mock ACP server venv).",
+    "_comment": "Temporary upper bound on the agent-client-protocol (acp) transitive dependency. suricate-sdk 1.35.0 requires agent-client-protocol>=0.10.1 with no upper bound, but acp 0.11.0 reordered the ACP prompt() arguments and breaks the SDK's ACP client (a PromptRequest validation error surfaces as 'ACP error: 2 validation errors for PromptRequest'). Pin acp <0.11 until a fixed suricate-sdk ships. Consumed by scripts/dev-safe.mjs (agent-server uvx install) and .github/workflows/mock-llm-e2e.yml (mock ACP server venv).",
     "agentClientProtocol": "agent-client-protocol<0.11"
   },
   "images": {
@@ -38,10 +38,10 @@
     "vscodeBasePath": "/vscode"
   },
   "packages": {
-    "agentServer": "openhands-agent-server",
+    "agentServer": "suricate-agent-server",
     "automation": "openhands-automation",
-    "tools": "openhands-tools",
-    "workspace": "openhands-workspace"
+    "tools": "suricate-tools",
+    "workspace": "suricate-workspace"
   },
   "telemetry": {
     "posthogApiKey": "phc_kBtz5nKmxVRRQ7HtPwr2QX9eMC5j65zE86QKocVNwb4U",

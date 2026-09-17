@@ -84,6 +84,8 @@ describe("FilesTab", () => {
       selectedPath: null,
       selectedConversationId: null,
       openPaths: [],
+      isAnnotateEnabled: false,
+      isAnnotateUnsupported: false,
     });
     localStorage.clear();
 
@@ -495,6 +497,16 @@ describe("FilesTab", () => {
     expect(content).toContainElement(
       screen.getByTestId("files-tab-open-in-new-window"),
     );
+  });
+
+  it("does not show an Annotate toolbar button (context menu only)", async () => {
+    renderTab("c1");
+    openFile("index.html", "c1");
+
+    await screen.findByTestId("files-tab-content-mode-toggle");
+    expect(
+      screen.queryByTestId("files-tab-annotate-toggle"),
+    ).not.toBeInTheDocument();
   });
 
   describe("conversation switching", () => {

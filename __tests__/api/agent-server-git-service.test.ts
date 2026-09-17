@@ -235,6 +235,58 @@ describe("AgentServerGitService", () => {
     });
   });
 
+  describe("getGitBlame", () => {
+    test("fetches blame lines via the raw client and maps to camelCase", async () => {
+      mockClientGet.mockResolvedValue({
+        data: [
+          {
+            line: 1,
+            sha: "a".repeat(40),
+            author: "Agent",
+            author_time: "2026-07-10T12:00:00+07:00",
+            summary: "add logging",
+          },
+        ],
+      });
+
+      const lines = await AgentServerGitService.getGitBlame(
+        "http://localhost:3000/api/conversations/123",
+        "test-api-key",
+        "/workspace/project/src/main.ts",
+      );
+
+      expect(mockClientGet).toHaveBeenCalledWith("/api/git/blame", {
+        params: { path: "/workspace/project/src/main.ts" },
+      });
+      expect(lines).toEqual([
+        {
+          line: 1,
+          sha: "a".repeat(40),
+          author: "Agent",
+          authorTime: "2026-07-10T12:00:00+07:00",
+          summary: "add logging",
+        },
+      ]);
+    });
+
+    test("resolves null when the agent server predates the endpoint (404)", async () => {
+      mockClientGet.mockRejectedValue(
+        Object.assign(new Error("Not Found"), {
+          name: "HttpError",
+          status: 404,
+        }),
+      );
+
+      const lines = await AgentServerGitService.getGitBlame(
+        "http://localhost:3000/api/conversations/123",
+        "test-api-key",
+        "/workspace/project/src/main.ts",
+      );
+
+      expect(lines).toBeNull();
+    });
+  });
+
   describe("getCommitChanges", () => {
     test("fetches a commit's files and maps statuses to the client format", async () => {
       // Arrange

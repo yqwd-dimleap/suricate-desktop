@@ -28,6 +28,11 @@ import {
   toPluginCoordinates,
   type WorkspaceMode,
 } from "#/api/conversation-metadata-store";
+import WorkspacesService from "#/api/workspaces-service/workspaces-service.api";
+import {
+  readLastUsedWorkspacePath,
+  writeLastUsedWorkspacePath,
+} from "#/utils/last-used-workspace";
 
 export interface CreateConversationVariables {
   query?: string;
@@ -42,6 +47,11 @@ export interface CreateConversationVariables {
   agentType?: "default" | "plan";
   plugins?: PluginSpec[];
   workingDir?: string;
+  /**
+   * When true, skip auto-attaching the last-used workspace (explicit
+   * "No workspace" launches).
+   */
+  noWorkspace?: boolean;
   workspaceMode?: WorkspaceMode;
   // Launch from a specific AgentProfile (local backend). When omitted, the
   // active AgentProfile (if any) is used so home-composed conversations
@@ -86,11 +96,39 @@ export const useCreateConversation = () => {
         plugins,
         repository,
         workingDir,
+        noWorkspace,
         workspaceMode,
         parentConversationId,
         agentType,
         agentProfileId,
       } = variables;
+
+      // Auto-attach the last-used local workspace when the caller did not pick
+      // one and did not explicitly ask for "No workspace". Cloud / repo
+      // launches leave workingDir alone.
+      let resolvedWorkingDir = workingDir;
+      if (
+        !repository &&
+        !noWorkspace &&
+        !resolvedWorkingDir &&
+        backend.kind !== "cloud"
+      ) {
+        const lastPath = readLastUsedWorkspacePath();
+        if (lastPath) {
+          try {
+            const { workspaces } = await WorkspacesService.listWorkspaces();
+            if (workspaces.some((workspace) => workspace.path === lastPath)) {
+              resolvedWorkingDir = lastPath;
+            }
+          } catch {
+            // Workspaces API unavailable — fall through to empty sandbox.
+          }
+        }
+      }
+
+      if (resolvedWorkingDir) {
+        writeLastUsedWorkspacePath(resolvedWorkingDir);
+      }
 
       // The active AgentProfile is the default launch profile for new
       // conversations (#3727), on both local and cloud (cloud gained
@@ -229,7 +267,7 @@ export const useCreateConversation = () => {
                 git_provider: repository.gitProvider,
               }
             : null,
-          workingDirOverride: workingDir,
+          workingDirOverride: resolvedWorkingDir,
           workspaceMode,
           parentConversationId,
           agentType,

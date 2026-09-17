@@ -20,6 +20,13 @@ import {
   computeGitLineGutters,
   gitGutterClassName,
 } from "#/utils/git-line-gutter";
+import {
+  groupBlameAnnotations,
+  type BlameAnnotationBlock,
+} from "#/utils/git-blame-annotations";
+import { useGitBlame } from "#/hooks/query/use-git-blame";
+import { useFilesTabStore } from "#/stores/files-tab-store";
+import { GitBlameGutter } from "./git-blame-gutter";
 import type { GitChangeStatus } from "#/api/open-hands.types";
 
 interface EditableSourceViewProps {
@@ -107,6 +114,141 @@ function GitGutterEffect({
   }, [draft, editorRef, gitDiff, gitStatus, monacoRef, path]);
 
   return null;
+}
+
+const GIT_BLAME_ANNOTATE_ENABLED_KEY = "filesGitBlameAnnotateEnabled";
+const GIT_BLAME_ANNOTATE_SUPPORTED_KEY = "filesGitBlameAnnotateSupported";
+
+/**
+ * Cursor-style editor context menu: right-click → Annotate with Git Blame /
+ * Close Annotations. Hidden when `/api/git/blame` is unsupported.
+ */
+function BlameAnnotateContextMenuEffect({
+  editorRef,
+}: {
+  editorRef: React.RefObject<MonacoEditor.IStandaloneCodeEditor | null>;
+}) {
+  const { t } = useTranslation("openhands");
+  const isAnnotateEnabled = useFilesTabStore((s) => s.isAnnotateEnabled);
+  const isAnnotateUnsupported = useFilesTabStore(
+    (s) => s.isAnnotateUnsupported,
+  );
+  const setAnnotateEnabled = useFilesTabStore((s) => s.setAnnotateEnabled);
+  const enabledKeyRef = React.useRef<{ set: (value: boolean) => void } | null>(
+    null,
+  );
+  const supportedKeyRef = React.useRef<{
+    set: (value: boolean) => void;
+  } | null>(null);
+
+  React.useEffect(() => {
+    const editor = editorRef.current;
+    if (!editor) {
+      return undefined;
+    }
+
+    const enabledKey = editor.createContextKey(
+      GIT_BLAME_ANNOTATE_ENABLED_KEY,
+      isAnnotateEnabled,
+    );
+    const supportedKey = editor.createContextKey(
+      GIT_BLAME_ANNOTATE_SUPPORTED_KEY,
+      !isAnnotateUnsupported,
+    );
+    enabledKeyRef.current = enabledKey;
+    supportedKeyRef.current = supportedKey;
+
+    const openAction = editor.addAction({
+      id: "files.annotateWithGitBlame",
+      label: t(I18nKey.FILES$ANNOTATE_WITH_GIT_BLAME),
+      precondition: `${GIT_BLAME_ANNOTATE_SUPPORTED_KEY} && !${GIT_BLAME_ANNOTATE_ENABLED_KEY}`,
+      contextMenuGroupId: "9_gitBlame",
+      contextMenuOrder: 1,
+      run: () => {
+        setAnnotateEnabled(true);
+      },
+    });
+    const closeAction = editor.addAction({
+      id: "files.closeAnnotations",
+      label: t(I18nKey.FILES$CLOSE_ANNOTATIONS),
+      precondition: `${GIT_BLAME_ANNOTATE_SUPPORTED_KEY} && ${GIT_BLAME_ANNOTATE_ENABLED_KEY}`,
+      contextMenuGroupId: "9_gitBlame",
+      contextMenuOrder: 1,
+      run: () => {
+        setAnnotateEnabled(false);
+      },
+    });
+
+    return () => {
+      openAction.dispose();
+      closeAction.dispose();
+      enabledKeyRef.current = null;
+      supportedKeyRef.current = null;
+    };
+    // Register once per editor instance; labels/state sync via context keys.
+  }, [editorRef, setAnnotateEnabled, t]);
+
+  React.useEffect(() => {
+    enabledKeyRef.current?.set(isAnnotateEnabled);
+  }, [isAnnotateEnabled]);
+
+  React.useEffect(() => {
+    supportedKeyRef.current?.set(!isAnnotateUnsupported);
+  }, [isAnnotateUnsupported]);
+
+  return null;
+}
+
+/**
+ * Loads blame for the open file and renders a left-of-linenumbers annotate
+ * column (Cursor-style). Closing annotate unmounts the column so the editor
+ * returns to its normal layout.
+ */
+function BlameAnnotateGutter({
+  path,
+  editorRef,
+}: {
+  path: string;
+  editorRef: React.RefObject<MonacoEditor.IStandaloneCodeEditor | null>;
+}) {
+  const { t } = useTranslation("openhands");
+  const isAnnotateEnabled = useFilesTabStore((s) => s.isAnnotateEnabled);
+  const setAnnotateUnsupported = useFilesTabStore(
+    (s) => s.setAnnotateUnsupported,
+  );
+  const { lines, isUnsupported } = useGitBlame({
+    filePath: path,
+    enabled: isAnnotateEnabled,
+  });
+
+  React.useEffect(() => {
+    if (isUnsupported) {
+      setAnnotateUnsupported(true);
+    }
+  }, [isUnsupported, setAnnotateUnsupported]);
+
+  const labels = React.useMemo(
+    () => ({
+      today: t(I18nKey.FILES$BLAME_TODAY),
+      yesterday: t(I18nKey.FILES$BLAME_YESTERDAY),
+    }),
+    [t],
+  );
+
+  const blocks: BlameAnnotationBlock[] = React.useMemo(() => {
+    if (!isAnnotateEnabled || !lines || lines.length === 0) {
+      return [];
+    }
+    return groupBlameAnnotations(lines);
+  }, [isAnnotateEnabled, lines]);
+
+  if (!isAnnotateEnabled || blocks.length === 0) {
+    return null;
+  }
+
+  return (
+    <GitBlameGutter editorRef={editorRef} blocks={blocks} labels={labels} />
+  );
 }
 
 /**
@@ -282,26 +424,34 @@ export function EditableSourceView({
           monacoRef={monacoRef}
         />
       ) : null}
-      <div className="min-h-0 flex-1">
-        <Editor
-          path={path}
-          language={getLanguageFromPath(path)}
-          theme="vs-dark"
-          value={draft}
-          options={EDITOR_OPTIONS}
-          onMount={(editor, monaco: Monaco) => {
-            editorRef.current = editor;
-            monacoRef.current = monaco;
-            setEditorReady(true);
-            editor.addCommand(
-              monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS,
-              () => {
-                saveRef.current();
-              },
-            );
-          }}
-          onChange={handleChange}
-        />
+      {conversationId && editorReady ? (
+        <BlameAnnotateContextMenuEffect editorRef={editorRef} />
+      ) : null}
+      <div className="flex min-h-0 flex-1">
+        {conversationId && editorReady ? (
+          <BlameAnnotateGutter path={path} editorRef={editorRef} />
+        ) : null}
+        <div className="min-h-0 min-w-0 flex-1">
+          <Editor
+            path={path}
+            language={getLanguageFromPath(path)}
+            theme="vs-dark"
+            value={draft}
+            options={EDITOR_OPTIONS}
+            onMount={(editor, monaco: Monaco) => {
+              editorRef.current = editor;
+              monacoRef.current = monaco;
+              setEditorReady(true);
+              editor.addCommand(
+                monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS,
+                () => {
+                  saveRef.current();
+                },
+              );
+            }}
+            onChange={handleChange}
+          />
+        </div>
       </div>
     </div>
   );

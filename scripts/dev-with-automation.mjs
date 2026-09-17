@@ -30,8 +30,8 @@
  *   - OH_AUTOMATION_GIT_REF: Git ref for automation (overrides default version)
  *   - OH_AGENT_SERVER_LOCAL_PATH: Absolute path to a local software-agent-sdk
  *     checkout. Highest precedence for agent-server source selection: rebuilds
- *     the agent-server from local source and installs openhands-sdk,
- *     openhands-tools and openhands-workspace as editable so source edits are
+ *     the agent-server from local source and installs suricate-sdk,
+ *     suricate-tools and suricate-workspace as editable so source edits are
  *     picked up without manual reinstall.
  *   - OH_AGENT_SERVER_GIT_REF: Git ref for agent-server
  * Secrets:
@@ -1462,7 +1462,7 @@ async function main(options = {}) {
     // before continuing. Defaults to 60 s, which is fine for warm-cache dev
     // workflows. The Electron desktop launcher bumps this to several minutes
     // because first-launch on a fresh machine runs `uvx` to download Python
-    // and install `openhands-agent-server` from PyPI, which can take much
+    // and install `suricate-agent-server` from PyPI, which can take much
     // longer than 60 s on a slow network.
     agentServerReadyTimeoutMs = 60_000,
     // Optional `(name, line, level)` callback that receives every service log
@@ -1592,7 +1592,7 @@ async function main(options = {}) {
   // Readiness timeout defaults to 60 s, which is fine for `npm run dev` against
   // a warm uvx cache. The Electron desktop launcher overrides this via the
   // `agentServerReadyTimeoutMs` option because first-launch on a fresh machine
-  // runs `uvx` to download Python + install `openhands-agent-server` from PyPI,
+  // runs `uvx` to download Python + install `suricate-agent-server` from PyPI,
   // which can take several minutes. Dropping the user into a half-booted UI
   // before that completes triggers axios "Request timeout" popups on the first
   // SPA fetch that hits an unbound port 18000.
